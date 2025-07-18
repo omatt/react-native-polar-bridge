@@ -11,3 +11,11 @@ export function connectToDevice(deviceId: string) {
 export function disconnectFromDevice(deviceId: string) {
   return PolarBridge.disconnectFromDevice(deviceId);
 }
+
+export function scanDevices(){
+  return PolarBridge.scanDevices();
+}
+
+export function fetchHrData(deviceId: string) {
+  return PolarBridge.fetchHrData(deviceId);
+}

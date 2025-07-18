@@ -9,10 +9,14 @@ import com.polar.sdk.api.PolarBleApiDefaultImpl
 import com.polar.sdk.api.PolarH10OfflineExerciseApi
 import com.polar.sdk.api.errors.PolarInvalidArgument
 import com.polar.sdk.api.model.*
+import io.reactivex.rxjava3.disposables.Disposable
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
+import com.facebook.react.modules.core.DeviceEventManagerModule
 
 @ReactModule(name = PolarBridgeModule.NAME)
 class PolarBridgeModule(reactContext: ReactApplicationContext) :
   NativePolarBridgeSpec(reactContext) {
+  private val reactContext: ReactApplicationContext = reactContext
 
   override fun getName(): String {
     return NAME
@@ -26,6 +30,9 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
 
   // ATTENTION! Replace with the device ID from your device.
   private var deviceId = "B4291522"
+
+  private var hrDisposable: Disposable? = null
+  private var scanDisposable: Disposable? = null
 
   private val api: PolarBleApi by lazy {
     // Notice all features are enabled
@@ -46,6 +53,7 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
   }
 
   override fun connectToDevice(deviceId: String) {
+    Log.e(TAG, "Connect device: $deviceId ")
     try {
       api.connectToDevice(deviceId)
     } catch(polarInvalidArgument: PolarInvalidArgument){
@@ -54,10 +62,101 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
   }
 
   override fun disconnectFromDevice(deviceId: String) {
+    Log.e(TAG, "Disconnect device: $deviceId ")
     try {
       api.disconnectFromDevice(deviceId)
     } catch(polarInvalidArgument: PolarInvalidArgument){
       Log.e(TAG, "Failed to disconnect from device. Reason $polarInvalidArgument ")
+    }
+  }
+
+  override fun scanDevices() {
+    Log.e(TAG, "Scan Devices")
+    val isDisposed = scanDisposable?.isDisposed ?: true
+    if (isDisposed) {
+      scanDisposable = api.searchForDevice()
+        .observeOn(AndroidSchedulers.mainThread())
+        .subscribe(
+          { polarDeviceInfo: PolarDeviceInfo ->
+            Log.d(TAG, "polar device found id: " + polarDeviceInfo.deviceId + " address: " + polarDeviceInfo.address + " rssi: " + polarDeviceInfo.rssi + " name: " + polarDeviceInfo.name + " isConnectable: " + polarDeviceInfo.isConnectable)
+          },
+          { error: Throwable ->
+//            toggleButtonUp(scanButton, "Scan devices")
+            Log.e(TAG, "Device scan failed. Reason $error")
+          },
+          {
+//            toggleButtonUp(scanButton, "Scan devices")
+            Log.d(TAG, "complete")
+          }
+        )
+    } else {
+//      toggleButtonUp(scanButton, "Scan devices")
+      scanDisposable?.dispose()
+    }
+  }
+
+  override fun fetchHrData(deviceId: String) {
+    Log.e(TAG, "Fetch Heart Data called on: $deviceId ")
+    try{
+      val isDisposed = hrDisposable?.isDisposed ?: true
+      if (isDisposed) {
+        hrDisposable = api.startHrStreaming(deviceId)
+          .observeOn(AndroidSchedulers.mainThread())
+          .subscribe(
+            { hrData: PolarHrData ->
+              Log.i(TAG, "PolarHrData ${hrData.samples.size}")
+              for (sample in hrData.samples) {
+                Log.d(TAG, "HR     bpm: ${sample.hr} " +
+                  "rrs: ${sample.rrsMs} " +
+                  "rrAvailable: ${sample.rrAvailable} " +
+                  "contactStatus: ${sample.contactStatus} " +
+                  "contactStatusSupported: ${sample.contactStatusSupported}")
+
+                val event: WritableMap = Arguments.createMap()
+                event.putInt("hr", sample.hr)
+
+                val rrsArray: WritableArray = Arguments.createArray()
+                sample.rrsMs.forEach { rrsValue ->
+                  rrsArray.pushInt(rrsValue)
+                }
+                event.putArray("rrsMs", rrsArray)
+                event.putBoolean("rrAvailable", sample.rrAvailable)
+                event.putBoolean("contactStatus", sample.contactStatus)
+                event.putBoolean("contactStatusSupported", sample.contactStatusSupported)
+
+                reactContext
+                  .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                  .emit("PolarHrData", event)
+
+              }
+            },
+            { error: Throwable ->
+//              toggleButtonUp(hrButton, R.string.start_hr_stream)
+              Log.e(TAG, "HR stream failed. Reason $error")
+
+              val errorEvent = Arguments.createMap()
+              errorEvent.putString("error", error.toString())
+              reactContext
+                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                .emit("PolarHrError", errorEvent)
+            },
+            {
+              Log.d(TAG, "HR stream complete")
+
+              val completeEvent = Arguments.createMap()
+              completeEvent.putString("message", "HR stream complete")
+              reactContext
+                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                .emit("PolarHrComplete", completeEvent)
+            }
+          )
+      } else {
+//        toggleButtonUp(hrButton, R.string.start_hr_stream)
+        // NOTE dispose will stop streaming if it is "running"
+        hrDisposable?.dispose()
+      }
+    } catch(polarInvalidArgument: PolarInvalidArgument){
+      Log.e(TAG, "Failed to fetch HR Data. Reason $polarInvalidArgument ")
     }
   }
 

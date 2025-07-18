@@ -92,6 +92,7 @@ dependencies {
   implementation "com.facebook.react:react-android"
   implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
   implementation 'io.reactivex.rxjava3:rxjava:3.1.10'
+  implementation 'io.reactivex.rxjava3:rxandroid:3.0.2'
   implementation 'com.github.polarofficial:polar-ble-sdk:6.1.1'
 }
 
