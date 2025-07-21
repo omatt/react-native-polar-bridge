@@ -79,10 +79,22 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
         .subscribe(
           { polarDeviceInfo: PolarDeviceInfo ->
             Log.d(TAG, "polar device found id: " + polarDeviceInfo.deviceId + " address: " + polarDeviceInfo.address + " rssi: " + polarDeviceInfo.rssi + " name: " + polarDeviceInfo.name + " isConnectable: " + polarDeviceInfo.isConnectable)
+
+            val device = Arguments.createMap().apply {
+              putString("deviceId", polarDeviceInfo.deviceId)
+              putString("address", polarDeviceInfo.address)
+              putInt("rssi", polarDeviceInfo.rssi)
+              putString("name", polarDeviceInfo.name)
+              putBoolean("isConnectable", polarDeviceInfo.isConnectable)
+            }
+            sendEvent("onDeviceFound", device)
           },
           { error: Throwable ->
 //            toggleButtonUp(scanButton, "Scan devices")
             Log.e(TAG, "Device scan failed. Reason $error")
+            sendEvent("onScanError", Arguments.createMap().apply {
+              putString("message", error.message)
+            })
           },
           {
 //            toggleButtonUp(scanButton, "Scan devices")
@@ -92,6 +104,7 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
     } else {
 //      toggleButtonUp(scanButton, "Scan devices")
       scanDisposable?.dispose()
+      Log.d(TAG, "Device scan stopped")
     }
   }
 
@@ -124,10 +137,7 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
                 event.putBoolean("contactStatus", sample.contactStatus)
                 event.putBoolean("contactStatusSupported", sample.contactStatusSupported)
 
-                reactContext
-                  .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-                  .emit("PolarHrData", event)
-
+                sendEvent("PolarHrData", event)
               }
             },
             { error: Throwable ->
@@ -136,29 +146,33 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
 
               val errorEvent = Arguments.createMap()
               errorEvent.putString("error", error.toString())
-              reactContext
-                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-                .emit("PolarHrError", errorEvent)
+              sendEvent("PolarHrError", errorEvent)
             },
             {
               Log.d(TAG, "HR stream complete")
 
               val completeEvent = Arguments.createMap()
               completeEvent.putString("message", "HR stream complete")
-              reactContext
-                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-                .emit("PolarHrComplete", completeEvent)
+              sendEvent("PolarHrComplete", completeEvent)
             }
           )
       } else {
 //        toggleButtonUp(hrButton, R.string.start_hr_stream)
         // NOTE dispose will stop streaming if it is "running"
         hrDisposable?.dispose()
+        Log.d(TAG, "HR stream stopped")
       }
     } catch(polarInvalidArgument: PolarInvalidArgument){
       Log.e(TAG, "Failed to fetch HR Data. Reason $polarInvalidArgument ")
     }
   }
+
+  private fun sendEvent(eventName: String, params: WritableMap?) {
+    reactContext
+      .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+      .emit(eventName, params)
+  }
+
 
   companion object {
     const val NAME = "PolarBridge"
