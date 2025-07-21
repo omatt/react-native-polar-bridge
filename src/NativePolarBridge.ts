@@ -7,6 +7,7 @@ export interface Spec extends TurboModule {
   disconnectFromDevice(deviceId: string): void;
   fetchHrData(deviceId: string): void;
   scanDevices(): void;
+  disposeHrStream(): void;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('PolarBridge');
