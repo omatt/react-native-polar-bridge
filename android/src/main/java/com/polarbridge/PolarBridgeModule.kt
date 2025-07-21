@@ -90,28 +90,25 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
             sendEvent("onDeviceFound", device)
           },
           { error: Throwable ->
-//            toggleButtonUp(scanButton, "Scan devices")
             Log.e(TAG, "Device scan failed. Reason $error")
             sendEvent("onScanError", Arguments.createMap().apply {
               putString("message", error.message)
             })
           },
           {
-//            toggleButtonUp(scanButton, "Scan devices")
             Log.d(TAG, "complete")
           }
         )
     } else {
-//      toggleButtonUp(scanButton, "Scan devices")
       scanDisposable?.dispose()
       Log.d(TAG, "Device scan stopped")
     }
   }
 
+  val isDisposed = hrDisposable?.isDisposed ?: true
   override fun fetchHrData(deviceId: String) {
     Log.e(TAG, "Fetch Heart Data called on: $deviceId ")
     try{
-      val isDisposed = hrDisposable?.isDisposed ?: true
       if (isDisposed) {
         hrDisposable = api.startHrStreaming(deviceId)
           .observeOn(AndroidSchedulers.mainThread())
@@ -141,7 +138,6 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
               }
             },
             { error: Throwable ->
-//              toggleButtonUp(hrButton, R.string.start_hr_stream)
               Log.e(TAG, "HR stream failed. Reason $error")
 
               val errorEvent = Arguments.createMap()
@@ -157,7 +153,6 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
             }
           )
       } else {
-//        toggleButtonUp(hrButton, R.string.start_hr_stream)
         // NOTE dispose will stop streaming if it is "running"
         hrDisposable?.dispose()
         Log.d(TAG, "HR stream stopped")
@@ -165,6 +160,10 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
     } catch(polarInvalidArgument: PolarInvalidArgument){
       Log.e(TAG, "Failed to fetch HR Data. Reason $polarInvalidArgument ")
     }
+  }
+
+  override fun disposeHrStream(){
+    hrDisposable?.dispose()
   }
 
   private fun sendEvent(eventName: String, params: WritableMap?) {

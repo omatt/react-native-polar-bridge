@@ -13,6 +13,8 @@ import {
   disconnectFromDevice,
   scanDevices,
   fetchHrData,
+  disposeHrStream,
+  emittedEventId,
 } from 'react-native-polar-bridge';
 import {useEffect, useState} from "react";
 
@@ -42,31 +44,10 @@ export default function App() {
   const [connectedDeviceId, setConnectedDeviceId] = useState<string | null>(null);
 
   /**
-   * Connect/Disconnect Devices
-   */
-  useEffect(() => {
-    const onDeviceConnected = polarEmitter.addListener('onDeviceConnected', (device) => {
-      console.log('Device connected:', device);
-      setConnectedDeviceId(device.deviceId);
-    });
-
-    const onDeviceDisconnected = polarEmitter.addListener('onDeviceDisconnected', (device) => {
-      console.log('Device disconnected:', device);
-      setConnectedDeviceId(null);
-      setIsHRStreamToggled(false);
-    });
-
-    return () => {
-      onDeviceConnected.remove();
-      onDeviceDisconnected.remove();
-    };
-  }, []);
-
-  /**
    * Scan Devices
    */
   useEffect(() => {
-    const onDeviceFound = polarEmitter.addListener('onDeviceFound', device => {
+    const onDeviceFound = polarEmitter.addListener(emittedEventId.SCAN_DEVICE_FOUND, device => {
       console.log('Device found:', device);
       // Store device in list, update state, etc.
       setDevices(prevDevices => {
@@ -75,11 +56,11 @@ export default function App() {
       });
     });
 
-    const onScanError = polarEmitter.addListener('onScanError', err => {
+    const onScanError = polarEmitter.addListener(emittedEventId.SCAN_DEVICE_ERROR, err => {
       console.error('Scan error:', err.message);
     });
 
-    const onScanComplete = polarEmitter.addListener('onScanComplete', () => {
+    const onScanComplete = polarEmitter.addListener(emittedEventId.SCAN_DEVICE_COMPLETE, () => {
       console.log('Scan complete');
     });
 
@@ -94,16 +75,17 @@ export default function App() {
    * Listen for HR data stream from Android PolarBLE SDK
    */
   useEffect(() => {
-    const hrListener = polarEmitter.addListener('PolarHrData', (data) => {
+    const hrListener = polarEmitter.addListener(emittedEventId.POLAR_HR_DATA, (data) => {
       // console.log('Received HR data:', data);
       console.log('Heart Rate:', `${data.hr} bpm ${formatDateYYYYMMDDHHMMSS(new Date())}`);
     });
 
-    const errorListener = polarEmitter.addListener('PolarHrError', (error) => {
-      console.error('HR stream error:', error);
+    const errorListener = polarEmitter.addListener(emittedEventId.POLAR_HR_ERROR, (error) => {
+      console.log('HR stream error:', error);
+      Alert.alert('Error', 'Polar device is not yet detected. Try stopping and starting HR Stream again.', [{ text: 'OK' }]);
     });
 
-    const completeListener = polarEmitter.addListener('PolarHrComplete', (msg) => {
+    const completeListener = polarEmitter.addListener(emittedEventId.POLAR_HR_COMPLETE, (msg) => {
       console.log('HR stream complete:', msg);
     });
 
@@ -185,7 +167,15 @@ export default function App() {
       )}
       <View style={styles.buttonContainer}>
         <Button title={isHRStreamToggled ? 'Stop Streaming HR Data' : 'Start Streaming HR Data'}
-                onPress={handleFetchHrData}/></View>
+                onPress={() => {
+                  if (isHRStreamToggled){
+                    // End HR stream, fix for BLE HR stream delay
+                    // when Polar device isn't detected for HR stream
+                    toggleHRStreamStatus();
+                    disposeHrStream();
+                  }
+                  else handleFetchHrData();
+                }}/></View>
       {/*<View style={styles.buttonContainer}>*/}
       {/*  <Button title="Request Bluetooth Permission" onPress={ requestBluetoothPermissions }/></View>*/}
     </View>
