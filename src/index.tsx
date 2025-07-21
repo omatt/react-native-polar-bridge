@@ -19,3 +19,16 @@ export function scanDevices(){
 export function fetchHrData(deviceId: string) {
   return PolarBridge.fetchHrData(deviceId);
 }
+
+export function disposeHrStream(){
+  return PolarBridge.disposeHrStream();
+}
+
+export const emittedEventId = Object.freeze({
+  SCAN_DEVICE_FOUND: 'onDeviceFound',
+  SCAN_DEVICE_ERROR: 'onScanError',
+  SCAN_DEVICE_COMPLETE: 'onScanComplete',
+  POLAR_HR_DATA: 'PolarHrData',
+  POLAR_HR_ERROR: 'PolarHrError',
+  POLAR_HR_COMPLETE: 'PolarHrComplete',
+});
