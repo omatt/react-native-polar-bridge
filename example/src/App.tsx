@@ -15,10 +15,12 @@ import {
   fetchHrData,
   disposeHrStream,
   emittedEventId,
+  fetchAccData,
+  disposeAccStream,
 } from 'react-native-polar-bridge';
 import {useEffect, useState} from "react";
 
-import {formatDateYYYYMMDDHHMMSS} from './services/utils';
+import {formatDateYYYYMMDDHHMMSS, formatPolarTimestamp} from './services/utils';
 
 // const result = multiply(3, 7);
 
@@ -35,10 +37,14 @@ type Device = {
 
 export default function App() {
   // const deviceId = 'D8207828';
+  const deviceId = 'D8455025';
   requestBluetoothPermissions().then();
 
   const [isHRStreamToggled, setIsHRStreamToggled] = useState(false);
   const toggleHRStreamStatus = () => setIsHRStreamToggled(prev => !prev);
+
+  const [isAccStreamToggled, setIsAccStreamToggled] = useState(false);
+  const toggleAccStreamStatus = () => setIsAccStreamToggled(prev => !prev);
 
   const [devices, setDevices] = useState<Device[]>([]);
   const [connectedDeviceId, setConnectedDeviceId] = useState<string | null>(null);
@@ -80,25 +86,55 @@ export default function App() {
       console.log('Heart Rate:', `${data.hr} bpm ${formatDateYYYYMMDDHHMMSS(new Date())}`);
     });
 
-    const errorListener = polarEmitter.addListener(emittedEventId.POLAR_HR_ERROR, (error) => {
+    const errorHrListener = polarEmitter.addListener(emittedEventId.POLAR_HR_ERROR, (error) => {
       console.log('HR stream error:', error);
-      Alert.alert('Error', 'Polar device is not yet detected. Try stopping and starting HR Stream again.', [{ text: 'OK' }]);
+      Alert.alert('Error', 'Polar device is yet to be detected. Try starting HR Stream again.', [{
+        text: 'OK',
+        onPress: () => {
+          console.log('OK Pressed');
+          toggleHRStreamStatus();
+          disposeHrStream();
+        },
+      }]);
     });
 
-    const completeListener = polarEmitter.addListener(emittedEventId.POLAR_HR_COMPLETE, (msg) => {
+    const completeHrListener = polarEmitter.addListener(emittedEventId.POLAR_HR_COMPLETE, (msg) => {
       console.log('HR stream complete:', msg);
+    });
+
+    const accListener = polarEmitter.addListener(emittedEventId.POLAR_ACC_DATA, (data) => {
+      console.log('ACC Stream:', `x: ${data.accX} y: ${data.accY} z: ${data.accZ}  ${formatPolarTimestamp(data.accTimestamp)}`);
+    });
+
+    const errorAccListener = polarEmitter.addListener(emittedEventId.POLAR_ACC_ERROR, (error) => {
+      console.log('ACC stream error:', error);
+      Alert.alert('Error', 'Polar device is yet to be detected. Try starting Acc Stream again.', [{
+        text: 'OK',
+        onPress: () => {
+          console.log('OK Pressed');
+          toggleHRStreamStatus();
+          disposeHrStream();
+        },
+      }]);
+    });
+
+    const completeAccListener = polarEmitter.addListener(emittedEventId.POLAR_ACC_COMPLETE, (msg) => {
+      console.log('ACC stream complete:', msg);
     });
 
     return () => {
       hrListener.remove();
-      errorListener.remove();
-      completeListener.remove();
+      errorHrListener.remove();
+      completeHrListener.remove();
+      accListener.remove();
+      errorAccListener.remove();
+      completeAccListener.remove();
     };
   }, []);
 
-  // const handleConnect = () => {
-  //   connectToDevice(deviceId);
-  // };
+  const handleConnect = () => {
+    connectToDevice(deviceId);
+  };
   //
   // const handleDisconnect = () => {
   //   disconnectFromDevice(deviceId);
@@ -114,6 +150,16 @@ export default function App() {
     }
   };
 
+  const handleFetchAccData = () => {
+    if(connectedDeviceId != null){
+      toggleAccStreamStatus();
+      fetchAccData(connectedDeviceId);
+    } else{
+      console.log('Empty Device ID or no connected Device');
+      Alert.alert('Error', 'No connected Polar device. Empty deviceId!', [{ text: 'OK' }]);
+    }
+  };
+
   const handleScanDevices = () => {
     setDevices([]);
     scanDevices();
@@ -122,15 +168,17 @@ export default function App() {
   return (
     <View style={styles.container}>
       {/*<Text>Result: {result}</Text>*/}
-      {/*<View style={styles.buttonContainer}>*/}
-      {/*  <Button title={`Connect ${deviceId}`} onPress={*/}
-      {/*    handleConnect*/}
-      {/*  }/>*/}
-      {/*</View>*/}
+      <View style={styles.buttonContainer}>
+        <Button title={`Connect ${deviceId}`} onPress={
+          handleConnect
+        }/>
+      </View>
       {/*<View style={styles.buttonContainer}>*/}
       {/*  <Button title="Disconnect" onPress={handleDisconnect}/></View>*/}
       <View style={styles.buttonContainer}>
-        <Button title={devices.length > 0 ? "Clear Scanned Devices" : "Scan Devices"} onPress={handleScanDevices}/></View>
+        <Button title={devices.length > 0 ? "Clear Scanned Devices" : "Scan Devices"} onPress={() => {
+          handleScanDevices();
+        }}/></View>
       {devices.length > 0 && (
         <View style={{ marginTop: 30, width: '100%' }}>
           <Text style={{ fontWeight: 'bold', marginBottom: 10 }}>Scanned Devices:</Text>
@@ -169,12 +217,19 @@ export default function App() {
         <Button title={isHRStreamToggled ? 'Stop Streaming HR Data' : 'Start Streaming HR Data'}
                 onPress={() => {
                   if (isHRStreamToggled){
-                    // End HR stream, fix for BLE HR stream delay
-                    // when Polar device isn't detected for HR stream
                     toggleHRStreamStatus();
                     disposeHrStream();
                   }
                   else handleFetchHrData();
+                }}/></View>
+      <View style={styles.buttonContainer}>
+        <Button title={isAccStreamToggled ? 'Stop Streaming ACC Data' : 'Start Streaming ACC Data'}
+                onPress={() => {
+                  if (isAccStreamToggled){
+                    toggleAccStreamStatus();
+                    disposeAccStream();
+                  }
+                  else handleFetchAccData();
                 }}/></View>
       {/*<View style={styles.buttonContainer}>*/}
       {/*  <Button title="Request Bluetooth Permission" onPress={ requestBluetoothPermissions }/></View>*/}

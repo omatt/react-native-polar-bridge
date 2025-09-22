@@ -20,8 +20,20 @@ export function fetchHrData(deviceId: string) {
   return PolarBridge.fetchHrData(deviceId);
 }
 
+export function fetchAccData(deviceId: string) {
+  return PolarBridge.fetchAccData(deviceId);
+}
+
 export function disposeHrStream(){
   return PolarBridge.disposeHrStream();
+}
+
+export function disposeAccStream(){
+  return PolarBridge.disposeAccStream();
+}
+
+export function disposeGyrStream(){
+  return PolarBridge.disposeGyrStream();
 }
 
 export const emittedEventId = Object.freeze({
@@ -31,4 +43,7 @@ export const emittedEventId = Object.freeze({
   POLAR_HR_DATA: 'PolarHrData',
   POLAR_HR_ERROR: 'PolarHrError',
   POLAR_HR_COMPLETE: 'PolarHrComplete',
+  POLAR_ACC_DATA: 'PolarAccData',
+  POLAR_ACC_ERROR: 'PolarAccError',
+  POLAR_ACC_COMPLETE: 'PolarAccComplete',
 });
