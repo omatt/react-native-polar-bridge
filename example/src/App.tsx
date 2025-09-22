@@ -17,6 +17,8 @@ import {
   emittedEventId,
   fetchAccData,
   disposeAccStream,
+  disposeGyrStream,
+  fetchGyrData,
 } from 'react-native-polar-bridge';
 import {useEffect, useState} from "react";
 
@@ -45,6 +47,9 @@ export default function App() {
 
   const [isAccStreamToggled, setIsAccStreamToggled] = useState(false);
   const toggleAccStreamStatus = () => setIsAccStreamToggled(prev => !prev);
+
+  const [isGyrStreamToggled, setIsGyrStreamToggled] = useState(false);
+  const toggleGyrStreamStatus = () => setIsGyrStreamToggled(prev => !prev);
 
   const [devices, setDevices] = useState<Device[]>([]);
   const [connectedDeviceId, setConnectedDeviceId] = useState<string | null>(null);
@@ -108,18 +113,38 @@ export default function App() {
 
     const errorAccListener = polarEmitter.addListener(emittedEventId.POLAR_ACC_ERROR, (error) => {
       console.log('ACC stream error:', error);
-      Alert.alert('Error', 'Polar device is yet to be detected. Try starting Acc Stream again.', [{
+      Alert.alert('Error', 'Polar device is yet to be detected. Try starting ACC Stream again.', [{
         text: 'OK',
         onPress: () => {
           console.log('OK Pressed');
-          toggleHRStreamStatus();
+          toggleAccStreamStatus();
           disposeHrStream();
         },
       }]);
     });
 
     const completeAccListener = polarEmitter.addListener(emittedEventId.POLAR_ACC_COMPLETE, (msg) => {
-      console.log('ACC stream complete:', msg);
+      console.log('GYR stream complete:', msg);
+    });
+
+    const gyrListener = polarEmitter.addListener(emittedEventId.POLAR_GYR_DATA, (data) => {
+      console.log('GYR Stream:', `x: ${data.gyrX} y: ${data.gyrY} z: ${data.gyrZ}  ${formatPolarTimestamp(data.gyrTimestamp)}`);
+    });
+
+    const errorGyrListener = polarEmitter.addListener(emittedEventId.POLAR_GYR_ERROR, (error) => {
+      console.log('GYR stream error:', error);
+      Alert.alert('Error', 'Polar device is yet to be detected. Try starting GYR Stream again.', [{
+        text: 'OK',
+        onPress: () => {
+          console.log('OK Pressed');
+          toggleGyrStreamStatus();
+          disposeHrStream();
+        },
+      }]);
+    });
+
+    const completeGyrListener = polarEmitter.addListener(emittedEventId.POLAR_GYR_COMPLETE, (msg) => {
+      console.log('GYR stream complete:', msg);
     });
 
     return () => {
@@ -129,6 +154,9 @@ export default function App() {
       accListener.remove();
       errorAccListener.remove();
       completeAccListener.remove();
+      gyrListener.remove();
+      errorGyrListener.remove();
+      completeGyrListener.remove();
     };
   }, []);
 
@@ -154,6 +182,16 @@ export default function App() {
     if(connectedDeviceId != null){
       toggleAccStreamStatus();
       fetchAccData(connectedDeviceId);
+    } else{
+      console.log('Empty Device ID or no connected Device');
+      Alert.alert('Error', 'No connected Polar device. Empty deviceId!', [{ text: 'OK' }]);
+    }
+  };
+
+  const handleFetchGyrData = () => {
+    if(connectedDeviceId != null){
+      toggleGyrStreamStatus();
+      fetchGyrData(connectedDeviceId);
     } else{
       console.log('Empty Device ID or no connected Device');
       Alert.alert('Error', 'No connected Polar device. Empty deviceId!', [{ text: 'OK' }]);
@@ -196,11 +234,15 @@ export default function App() {
                           onPress={() => {
                             if (isConnected) {
                               if(isHRStreamToggled) handleFetchHrData(); // Stop HR stream if running
+                              if(isAccStreamToggled) handleFetchAccData(); // Stop ACC stream if running
+                              if(isGyrStreamToggled) handleFetchGyrData(); // Stop GYR stream if running
                               disconnectFromDevice(device.deviceId);
                               setConnectedDeviceId(null);
                             } else {
                               if (connectedDeviceId && connectedDeviceId !== device.deviceId) {
                                 if(isHRStreamToggled) handleFetchHrData(); // Stop HR stream if running
+                                if(isAccStreamToggled) handleFetchAccData(); // Stop ACC stream if running
+                                if(isGyrStreamToggled) handleFetchGyrData(); // Stop GYR stream if running
                                 disconnectFromDevice(connectedDeviceId);
                               }
                               connectToDevice(device.deviceId);
@@ -230,6 +272,15 @@ export default function App() {
                     disposeAccStream();
                   }
                   else handleFetchAccData();
+                }}/></View>
+      <View style={styles.buttonContainer}>
+        <Button title={isGyrStreamToggled ? 'Stop Streaming GYR Data' : 'Start Streaming GYR Data'}
+                onPress={() => {
+                  if (isGyrStreamToggled){
+                    toggleGyrStreamStatus();
+                    disposeGyrStream();
+                  }
+                  else handleFetchGyrData();
                 }}/></View>
       {/*<View style={styles.buttonContainer}>*/}
       {/*  <Button title="Request Bluetooth Permission" onPress={ requestBluetoothPermissions }/></View>*/}

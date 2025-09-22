@@ -131,9 +131,9 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  val isDisposed = hrDisposable?.isDisposed ?: true
   override fun fetchHrData(deviceId: String) {
     Log.e(TAG, "Fetch Heart Data called on: $deviceId ")
+    val isDisposed = hrDisposable?.isDisposed ?: true
     try{
       if (isDisposed) {
         hrDisposable = api.startHrStreaming(deviceId)
@@ -218,6 +218,7 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
 
   override fun fetchAccData(deviceId: String) {
     Log.e(TAG, "Fetch Accelerometer Data called on: $deviceId ")
+    val isDisposed = accDisposable?.isDisposed ?: true
     try{
       if (isDisposed) {
         accDisposable = requestStreamSettings(deviceId, PolarBleApi.PolarDeviceDataType.ACC)
@@ -258,11 +259,63 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
           )
       } else {
         // NOTE dispose will stop streaming if it is "running"
-        hrDisposable?.dispose()
+        accDisposable?.dispose()
         Log.d(TAG, "ACC stream stopped")
       }
     } catch(polarInvalidArgument: PolarInvalidArgument){
       Log.e(TAG, "Failed to fetch ACC Data. Reason $polarInvalidArgument ")
+    }
+  }
+
+  override fun fetchGyrData(deviceId: String) {
+    Log.e(TAG, "Fetch Gyroscope Data called on: $deviceId ")
+    val isDisposed = gyrDisposable?.isDisposed ?: true
+    try {
+      if (isDisposed) {
+        gyrDisposable = requestStreamSettings(deviceId, PolarBleApi.PolarDeviceDataType.GYRO)
+          .flatMap { settings: PolarSensorSetting ->
+            api.startGyroStreaming(deviceId, settings)
+          }
+          .observeOn(AndroidSchedulers.mainThread())
+          .subscribe(
+            { polarGyroData: PolarGyroData ->
+              for (data in polarGyroData.samples) {
+                Log.d(TAG, "GYR    x: ${data.x} y: ${data.y} z: ${data.z} timeStamp: ${data.timeStamp}")
+
+                val event: WritableMap = Arguments.createMap()
+                // Float not supported
+                // See: https://github.com/facebook/react-native/issues/9685
+                // See: https://javadoc.io/doc/com.facebook.react/react-native/0.20.1/com/facebook/react/bridge/WritableMap.html
+                event.putString("gyrX", "${data.x}")
+                event.putString("gyrY", "${data.y}")
+                event.putString("gyrZ", "${data.z}")
+                // Long not supported, use double as workaround
+                event.putDouble("gyrTimestamp", data.timeStamp.toDouble())
+
+                sendEvent("PolarGyrData", event)
+              }
+            },
+            { error: Throwable ->
+              Log.e(TAG, "GYR stream failed. Reason $error")
+
+              val errorEvent = Arguments.createMap()
+              errorEvent.putString("error", error.toString())
+              sendEvent("PolarGyrError", errorEvent)
+            },
+            {
+              Log.d(TAG, "GYR stream complete")
+
+              val completeEvent = Arguments.createMap()
+              completeEvent.putString("message", "GYR stream complete")
+              sendEvent("PolarGyrComplete", completeEvent)
+            }
+          )
+      } else {
+        gyrDisposable?.dispose()
+        Log.d(TAG, "GYR stream stopped")
+      }
+    } catch(polarInvalidArgument: PolarInvalidArgument){
+      Log.e(TAG, "Failed to fetch GYR Data. Reason $polarInvalidArgument ")
     }
   }
 
