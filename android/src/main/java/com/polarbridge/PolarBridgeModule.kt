@@ -38,6 +38,7 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
   private var scanDisposable: Disposable? = null
   private var accDisposable: Disposable? = null
   private var gyrDisposable: Disposable? = null
+  private var ppgDisposable: Disposable? = null
 
   private val api: PolarBleApi by lazy {
     // Notice all features are enabled
@@ -319,6 +320,60 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  override fun fetchPpgData(deviceId: String) {
+    Log.e(TAG, "Fetch Photoplethysmograph Data called on: $deviceId ")
+    val isDisposed = ppgDisposable?.isDisposed ?: true
+    try {
+      if (isDisposed) {
+        ppgDisposable = requestStreamSettings(deviceId, PolarBleApi.PolarDeviceDataType.PPG)
+          .flatMap { settings: PolarSensorSetting ->
+            api.startPpgStreaming(deviceId, settings)
+          }
+          .subscribe(
+            { polarPpgData: PolarPpgData ->
+              if (polarPpgData.type == PolarPpgData.PpgDataType.PPG3_AMBIENT1) {
+                for (data in polarPpgData.samples) {
+                  Log.d(TAG, "PPG    ppg0: ${data.channelSamples[0]} ppg1: ${data.channelSamples[1]} ppg2: ${data.channelSamples[2]} ambient: ${data.channelSamples[3]} timeStamp: ${data.timeStamp}")
+
+                  val event: WritableMap = Arguments.createMap()
+                  // Float not supported
+                  // See: https://github.com/facebook/react-native/issues/9685
+                  // See: https://javadoc.io/doc/com.facebook.react/react-native/0.20.1/com/facebook/react/bridge/WritableMap.html
+                  event.putString("ppg0", "${data.channelSamples[0]}")
+                  event.putString("ppg1", "${data.channelSamples[1]}")
+                  event.putString("ppg2", "${data.channelSamples[2]}")
+                  event.putString("ambient", "${data.channelSamples[3]}")
+                  // Long not supported, use double as workaround
+                  event.putDouble("ppgTimestamp", data.timeStamp.toDouble())
+
+                  sendEvent("PolarPpgData", event)
+                }
+              }
+            },
+            { error: Throwable ->
+              Log.e(TAG, "PPG stream failed. Reason $error")
+
+              val errorEvent = Arguments.createMap()
+              errorEvent.putString("error", error.toString())
+              sendEvent("PolarPpgError", errorEvent)
+            },
+            {
+              Log.d(TAG, "PPG stream complete")
+
+              val completeEvent = Arguments.createMap()
+              completeEvent.putString("message", "PPG stream complete")
+              sendEvent("PolarPpgComplete", completeEvent)
+            }
+          )
+      } else {
+        ppgDisposable?.dispose()
+        Log.d(TAG, "PPG stream stopped")
+      }
+    } catch(polarInvalidArgument: PolarInvalidArgument){
+      Log.e(TAG, "Failed to fetch PPG Data. Reason $polarInvalidArgument ")
+    }
+  }
+
   override fun disposeHrStream(){
     hrDisposable?.dispose()
   }
@@ -329,6 +384,10 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
 
   override fun disposeGyrStream(){
     gyrDisposable?.dispose()
+  }
+
+  override fun disposePpgStream(){
+    ppgDisposable?.dispose()
   }
 
   private fun sendEvent(eventName: String, params: WritableMap?) {
