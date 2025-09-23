@@ -19,10 +19,13 @@ import {
   disposeAccStream,
   disposeGyrStream,
   fetchGyrData,
+  disposePpgStream,
+  fetchPpgData,
 } from 'react-native-polar-bridge';
 import {useEffect, useState} from "react";
 
 import {formatDateYYYYMMDDHHMMSS, formatPolarTimestamp} from './services/utils';
+import {logAccToCSV, logGyroToCSV, logHeartRateToCSV, logPpgToCSV} from './services/writer';
 
 // const result = multiply(3, 7);
 
@@ -37,6 +40,13 @@ type Device = {
   isConnectable?: string;
 };
 
+const displayDialogNoConnectedDevice = () => {
+  console.log('Empty Device ID or no connected Device');
+  return (
+    Alert.alert('Error', 'No connected Polar device. Empty deviceId!', [{ text: 'OK' }])
+  );
+}
+
 export default function App() {
   // const deviceId = 'D8207828';
   const deviceId = 'D8455025';
@@ -50,6 +60,9 @@ export default function App() {
 
   const [isGyrStreamToggled, setIsGyrStreamToggled] = useState(false);
   const toggleGyrStreamStatus = () => setIsGyrStreamToggled(prev => !prev);
+
+  const [isPpgStreamToggled, setIsPpgStreamToggled] = useState(false);
+  const togglePpgStreamStatus = () => setIsPpgStreamToggled(prev => !prev);
 
   const [devices, setDevices] = useState<Device[]>([]);
   const [connectedDeviceId, setConnectedDeviceId] = useState<string | null>(null);
@@ -83,12 +96,13 @@ export default function App() {
   }, []);
 
   /**
-   * Listen for HR data stream from Android PolarBLE SDK
+   * Listen for device data stream from Android PolarBLE SDK
    */
   useEffect(() => {
     const hrListener = polarEmitter.addListener(emittedEventId.POLAR_HR_DATA, (data) => {
       // console.log('Received HR data:', data);
-      console.log('Heart Rate:', `${data.hr} bpm ${formatDateYYYYMMDDHHMMSS(new Date())}`);
+      console.log('Heart Rate:', `${data.hr} bpm timestamp: ${formatDateYYYYMMDDHHMMSS(new Date())}`);
+      logHeartRateToCSV(data.hr).then();
     });
 
     const errorHrListener = polarEmitter.addListener(emittedEventId.POLAR_HR_ERROR, (error) => {
@@ -108,7 +122,8 @@ export default function App() {
     });
 
     const accListener = polarEmitter.addListener(emittedEventId.POLAR_ACC_DATA, (data) => {
-      console.log('ACC Stream:', `x: ${data.accX} y: ${data.accY} z: ${data.accZ}  ${formatPolarTimestamp(data.accTimestamp)}`);
+      console.log('ACC Stream:', `x: ${data.accX} y: ${data.accY} z: ${data.accZ} timestamp: ${formatPolarTimestamp(data.accTimestamp)}`);
+      logAccToCSV(data.accX, data.accY, data.accZ, formatPolarTimestamp(data.accTimestamp)).then();
     });
 
     const errorAccListener = polarEmitter.addListener(emittedEventId.POLAR_ACC_ERROR, (error) => {
@@ -118,7 +133,7 @@ export default function App() {
         onPress: () => {
           console.log('OK Pressed');
           toggleAccStreamStatus();
-          disposeHrStream();
+          disposeAccStream();
         },
       }]);
     });
@@ -128,7 +143,8 @@ export default function App() {
     });
 
     const gyrListener = polarEmitter.addListener(emittedEventId.POLAR_GYR_DATA, (data) => {
-      console.log('GYR Stream:', `x: ${data.gyrX} y: ${data.gyrY} z: ${data.gyrZ}  ${formatPolarTimestamp(data.gyrTimestamp)}`);
+      console.log('GYR Stream:', `x: ${data.gyrX} y: ${data.gyrY} z: ${data.gyrZ} timestamp: ${formatPolarTimestamp(data.gyrTimestamp)}`);
+      logGyroToCSV(data.gyrX, data.gyrY, data.gyrZ, formatPolarTimestamp(data.gyrTimestamp)).then();
     });
 
     const errorGyrListener = polarEmitter.addListener(emittedEventId.POLAR_GYR_ERROR, (error) => {
@@ -138,13 +154,34 @@ export default function App() {
         onPress: () => {
           console.log('OK Pressed');
           toggleGyrStreamStatus();
-          disposeHrStream();
+          disposeGyrStream();
         },
       }]);
     });
 
     const completeGyrListener = polarEmitter.addListener(emittedEventId.POLAR_GYR_COMPLETE, (msg) => {
       console.log('GYR stream complete:', msg);
+    });
+
+    const ppgListener = polarEmitter.addListener(emittedEventId.POLAR_PPG_DATA, (data) => {
+      console.log('PPG Stream:', `ppg0: ${data.ppg0} ppg1: ${data.ppg1} ppg2: ${data.ppg2} ambient: ${data.ambient} timestamp: ${formatPolarTimestamp(data.ppgTimestamp)}`);
+      logPpgToCSV(data.ppg0, data.ppg1, data.ppg2, data.ambient, formatPolarTimestamp(data.ppgTimestamp)).then();
+    });
+
+    const errorPpgListener = polarEmitter.addListener(emittedEventId.POLAR_PPG_ERROR, (error) => {
+      console.log('PPG stream error:', error);
+      Alert.alert('Error', 'Polar device is yet to be detected. Try starting PPG Stream again.', [{
+        text: 'OK',
+        onPress: () => {
+          console.log('OK Pressed');
+          togglePpgStreamStatus();
+          disposePpgStream();
+        },
+      }]);
+    });
+
+    const completePpgListener = polarEmitter.addListener(emittedEventId.POLAR_PPG_COMPLETE, (msg) => {
+      console.log('PPG stream complete:', msg);
     });
 
     return () => {
@@ -157,6 +194,9 @@ export default function App() {
       gyrListener.remove();
       errorGyrListener.remove();
       completeGyrListener.remove();
+      ppgListener.remove();
+      errorPpgListener.remove();
+      completePpgListener.remove();
     };
   }, []);
 
@@ -173,8 +213,7 @@ export default function App() {
       toggleHRStreamStatus();
       fetchHrData(connectedDeviceId);
     } else{
-      console.log('Empty Device ID or no connected Device');
-      Alert.alert('Error', 'No connected Polar device. Empty deviceId!', [{ text: 'OK' }]);
+      displayDialogNoConnectedDevice();
     }
   };
 
@@ -183,8 +222,7 @@ export default function App() {
       toggleAccStreamStatus();
       fetchAccData(connectedDeviceId);
     } else{
-      console.log('Empty Device ID or no connected Device');
-      Alert.alert('Error', 'No connected Polar device. Empty deviceId!', [{ text: 'OK' }]);
+      displayDialogNoConnectedDevice();
     }
   };
 
@@ -193,8 +231,16 @@ export default function App() {
       toggleGyrStreamStatus();
       fetchGyrData(connectedDeviceId);
     } else{
-      console.log('Empty Device ID or no connected Device');
-      Alert.alert('Error', 'No connected Polar device. Empty deviceId!', [{ text: 'OK' }]);
+      displayDialogNoConnectedDevice();
+    }
+  };
+
+  const handleFetchPpgData = () => {
+    if(connectedDeviceId != null){
+      togglePpgStreamStatus();
+      fetchPpgData(connectedDeviceId);
+    } else{
+      displayDialogNoConnectedDevice();
     }
   };
 
@@ -236,6 +282,7 @@ export default function App() {
                               if(isHRStreamToggled) handleFetchHrData(); // Stop HR stream if running
                               if(isAccStreamToggled) handleFetchAccData(); // Stop ACC stream if running
                               if(isGyrStreamToggled) handleFetchGyrData(); // Stop GYR stream if running
+                              if(isPpgStreamToggled) handleFetchPpgData(); // Stop PPG stream if running
                               disconnectFromDevice(device.deviceId);
                               setConnectedDeviceId(null);
                             } else {
@@ -243,6 +290,7 @@ export default function App() {
                                 if(isHRStreamToggled) handleFetchHrData(); // Stop HR stream if running
                                 if(isAccStreamToggled) handleFetchAccData(); // Stop ACC stream if running
                                 if(isGyrStreamToggled) handleFetchGyrData(); // Stop GYR stream if running
+                                if(isPpgStreamToggled) handleFetchPpgData(); // Stop PPG stream if running
                                 disconnectFromDevice(connectedDeviceId);
                               }
                               connectToDevice(device.deviceId);
@@ -282,6 +330,15 @@ export default function App() {
                   }
                   else handleFetchGyrData();
                 }}/></View>
+      <View style={styles.buttonContainer}>
+        <Button title={isPpgStreamToggled ? 'Stop Streaming PPG Data' : 'Start Streaming PPG Data'}
+                onPress={() => {
+                  if (isPpgStreamToggled){
+                    togglePpgStreamStatus();
+                    disposePpgStream();
+                  }
+                  else handleFetchPpgData();
+                }}/></View>
       {/*<View style={styles.buttonContainer}>*/}
       {/*  <Button title="Request Bluetooth Permission" onPress={ requestBluetoothPermissions }/></View>*/}
     </View>
@@ -295,8 +352,8 @@ export const requestBluetoothPermissions = async (): Promise<boolean> => {
       const permissions: Permission[] = [
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-        // PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-        // PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+        PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
+        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
       ];
 
       const granted = await PermissionsAndroid.requestMultiple(permissions);
@@ -349,6 +406,7 @@ const styles = StyleSheet.create({
 
   buttonContainer: {
     marginTop: 20,
+    width: '70%',
   },
 
   deviceItem: {
