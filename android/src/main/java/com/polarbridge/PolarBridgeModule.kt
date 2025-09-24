@@ -15,6 +15,7 @@ import com.polar.androidcommunications.api.ble.model.DisInfo
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import io.reactivex.rxjava3.core.Flowable
 import io.reactivex.rxjava3.core.Single
+import java.util.*
 
 @ReactModule(name = PolarBridgeModule.NAME)
 class PolarBridgeModule(reactContext: ReactApplicationContext) :
@@ -116,6 +117,45 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
     } catch(polarInvalidArgument: PolarInvalidArgument){
       Log.e(TAG, "Failed to disable SDK mode on device. Reason $polarInvalidArgument ")
     }
+  }
+
+  // Sets the date time on the Polar device
+  override fun setDeviceTime(deviceId: String) {
+    val calendar = Calendar.getInstance()
+    calendar.time = Date()
+    Log.e(TAG, "Set device: $deviceId time to ${calendar.time}")
+    try {
+      api.setLocalTime(deviceId, calendar)
+        .observeOn(AndroidSchedulers.mainThread())
+        .subscribe(
+          {
+            val timeSetString = "time ${calendar.time} set to device"
+            Log.d(TAG, timeSetString)
+          },
+          { error: Throwable -> Log.e(TAG, "set time failed: $error") }
+        )
+    } catch(polarInvalidArgument: PolarInvalidArgument){
+      Log.e(TAG, "Failed to set device time. Reason $polarInvalidArgument ")
+    }
+  }
+
+  override fun getDeviceTime(deviceId: String) {
+    Log.e(TAG, "Get Devices Time")
+    api.getLocalTime(deviceId)
+      .observeOn(AndroidSchedulers.mainThread())
+      .subscribe(
+        { calendar ->
+          val timeGetString = "${calendar.time} read from the device"
+
+          val event: WritableMap = Arguments.createMap()
+          event.putString("time", "${calendar.time}")
+          // Long not supported, use double as workaround
+          // See: https://github.com/facebook/react-native/issues/9685
+          event.putDouble("timeMs", calendar.timeInMillis.toDouble())
+          sendEvent("PolarGetTimeData", event)
+        },
+        { error: Throwable -> Log.e(TAG, "get time failed: $error") }
+      )
   }
 
   override fun scanDevices() {

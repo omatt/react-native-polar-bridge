@@ -40,6 +40,14 @@ export function disableSdkMode(deviceId: string) {
   return PolarBridge.disableSdkMode(deviceId);
 }
 
+export function setDeviceTime(deviceId: string) {
+  return PolarBridge.setDeviceTime(deviceId);
+}
+
+export function getDeviceTime(deviceId: string) {
+  return PolarBridge.getDeviceTime(deviceId);
+}
+
 export function disposeHrStream() {
   return PolarBridge.disposeHrStream();
 }
@@ -60,6 +68,7 @@ export const emittedEventId = Object.freeze({
   SCAN_DEVICE_FOUND: 'onDeviceFound',
   SCAN_DEVICE_ERROR: 'onScanError',
   SCAN_DEVICE_COMPLETE: 'onScanComplete',
+  POLAR_DEVICE_TIME: 'PolarGetTimeData',
   POLAR_HR_DATA: 'PolarHrData',
   POLAR_HR_ERROR: 'PolarHrError',
   POLAR_HR_COMPLETE: 'PolarHrComplete',

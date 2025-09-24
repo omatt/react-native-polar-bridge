@@ -23,7 +23,7 @@ import {
   fetchGyrData,
   disposePpgStream,
   fetchPpgData,
-  enableSdkMode, disableSdkMode,
+  enableSdkMode, disableSdkMode, getDeviceTime, setDeviceTime,
 } from 'react-native-polar-bridge';
 import { useEffect, useState } from 'react';
 
@@ -299,6 +299,16 @@ export default function App() {
       }
     );
 
+    const deviceTimeListener = polarEmitter.addListener(
+      emittedEventId.POLAR_DEVICE_TIME,
+      (data) => {
+        console.log(
+          'Polar Device Time',
+          `${data.time} ms: ${data.timeMs} converted timeInMs: ${formatDateYYYYMMDDHHMMSS(data.timeMs)}`
+        );
+      }
+    );
+
     return () => {
       hrListener.remove();
       errorHrListener.remove();
@@ -312,6 +322,7 @@ export default function App() {
       ppgListener.remove();
       errorPpgListener.remove();
       completePpgListener.remove();
+      deviceTimeListener.remove();
     };
   }, []);
 
@@ -511,6 +522,30 @@ export default function App() {
               togglePpgStreamStatus();
               disposePpgStream();
             } else handleFetchPpgData();
+          }}
+        />
+      </View>
+      <View style={styles.buttonContainer}>
+        <Button
+          title='Set Device Time'
+          onPress={() => {
+            if (connectedDeviceId != null) {
+              setDeviceTime(connectedDeviceId);
+            } else {
+              displayDialogNoConnectedDevice();
+            }
+          }}
+        />
+      </View>
+      <View style={styles.buttonContainer}>
+        <Button
+          title='Get Device Time'
+          onPress={() => {
+            if (connectedDeviceId != null) {
+              getDeviceTime(connectedDeviceId);
+            } else {
+              displayDialogNoConnectedDevice();
+            }
           }}
         />
       </View>
