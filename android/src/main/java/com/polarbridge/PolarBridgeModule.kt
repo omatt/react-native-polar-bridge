@@ -97,6 +97,27 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  override fun enableSdkMode(deviceId: String) {
+    Log.e(TAG, "Enable SDK Mode device: $deviceId ")
+    try {
+      // Dispose all existing streams. SDK mode enable command stops all the streams
+      // but client is not informed. This is workaround for the bug.
+      disposeAllStreams()
+      api.enableSDKMode(deviceId)
+    } catch(polarInvalidArgument: PolarInvalidArgument){
+      Log.e(TAG, "Failed to enable SDK mode on device. Reason $polarInvalidArgument ")
+    }
+  }
+
+  override fun disableSdkMode(deviceId: String) {
+    Log.e(TAG, "Disable SDK Mode device: $deviceId ")
+    try {
+      api.disableSDKMode(deviceId)
+    } catch(polarInvalidArgument: PolarInvalidArgument){
+      Log.e(TAG, "Failed to disable SDK mode on device. Reason $polarInvalidArgument ")
+    }
+  }
+
   override fun scanDevices() {
     Log.e(TAG, "Scan Devices")
     val isDisposed = scanDisposable?.isDisposed ?: true
@@ -213,6 +234,14 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
 //          sensorSettings.first.settings,
 //          sensorSettings.second.settings
 //        ).toFlowable()
+        // Contains settings set by default
+        sensorSettings.first.settings.forEach { setting ->
+          Log.d(TAG, "First Setting: $setting")
+        }
+        // Contains all available settings
+        sensorSettings.second.settings.forEach { setting ->
+          Log.d(TAG, "Second Setting: $setting")
+        }
         Single.just(sensorSettings.first).toFlowable()  // Load default device settings
       }
   }
@@ -387,6 +416,13 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
   }
 
   override fun disposePpgStream(){
+    ppgDisposable?.dispose()
+  }
+
+  private fun disposeAllStreams() {
+    hrDisposable?.dispose()
+    accDisposable?.dispose()
+    gyrDisposable?.dispose()
     ppgDisposable?.dispose()
   }
 

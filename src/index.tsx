@@ -12,7 +12,7 @@ export function disconnectFromDevice(deviceId: string) {
   return PolarBridge.disconnectFromDevice(deviceId);
 }
 
-export function scanDevices(){
+export function scanDevices() {
   return PolarBridge.scanDevices();
 }
 
@@ -32,19 +32,27 @@ export function fetchPpgData(deviceId: string) {
   return PolarBridge.fetchPpgData(deviceId);
 }
 
-export function disposeHrStream(){
+export function enableSdkMode(deviceId: string) {
+  return PolarBridge.enableSdkMode(deviceId);
+}
+
+export function disableSdkMode(deviceId: string) {
+  return PolarBridge.disableSdkMode(deviceId);
+}
+
+export function disposeHrStream() {
   return PolarBridge.disposeHrStream();
 }
 
-export function disposeAccStream(){
+export function disposeAccStream() {
   return PolarBridge.disposeAccStream();
 }
 
-export function disposeGyrStream(){
+export function disposeGyrStream() {
   return PolarBridge.disposeGyrStream();
 }
 
-export function disposePpgStream(){
+export function disposePpgStream() {
   return PolarBridge.disposePpgStream();
 }
 
