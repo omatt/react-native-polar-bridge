@@ -6,7 +6,9 @@ import {
   Platform,
   PermissionsAndroid,
   type Permission,
-  NativeModules, NativeEventEmitter, Alert
+  NativeModules,
+  NativeEventEmitter,
+  Alert,
 } from 'react-native';
 import {
   connectToDevice,
@@ -21,11 +23,20 @@ import {
   fetchGyrData,
   disposePpgStream,
   fetchPpgData,
+  enableSdkMode, disableSdkMode,
 } from 'react-native-polar-bridge';
-import {useEffect, useState} from "react";
+import { useEffect, useState } from 'react';
 
-import {formatDateYYYYMMDDHHMMSS, formatPolarTimestamp} from './services/utils';
-import {logAccToCSV, logGyroToCSV, logHeartRateToCSV, logPpgToCSV} from './services/writer';
+import {
+  formatDateYYYYMMDDHHMMSS,
+  formatPolarTimestamp,
+} from './services/utils';
+import {
+  logAccToCSV,
+  logGyroToCSV,
+  logHeartRateToCSV,
+  logPpgToCSV,
+} from './services/writer';
 
 // const result = multiply(3, 7);
 
@@ -42,10 +53,10 @@ type Device = {
 
 const displayDialogNoConnectedDevice = () => {
   console.log('Empty Device ID or no connected Device');
-  return (
-    Alert.alert('Error', 'No connected Polar device. Empty deviceId!', [{ text: 'OK' }])
-  );
-}
+  return Alert.alert('Error', 'No connected Polar device. Empty deviceId!', [
+    { text: 'OK' },
+  ]);
+};
 
 export default function App() {
   // const deviceId = 'D8207828';
@@ -53,40 +64,56 @@ export default function App() {
   requestBluetoothPermissions().then();
 
   const [isHRStreamToggled, setIsHRStreamToggled] = useState(false);
-  const toggleHRStreamStatus = () => setIsHRStreamToggled(prev => !prev);
+  const toggleHRStreamStatus = () => setIsHRStreamToggled((prev) => !prev);
 
   const [isAccStreamToggled, setIsAccStreamToggled] = useState(false);
-  const toggleAccStreamStatus = () => setIsAccStreamToggled(prev => !prev);
+  const toggleAccStreamStatus = () => setIsAccStreamToggled((prev) => !prev);
 
   const [isGyrStreamToggled, setIsGyrStreamToggled] = useState(false);
-  const toggleGyrStreamStatus = () => setIsGyrStreamToggled(prev => !prev);
+  const toggleGyrStreamStatus = () => setIsGyrStreamToggled((prev) => !prev);
 
   const [isPpgStreamToggled, setIsPpgStreamToggled] = useState(false);
-  const togglePpgStreamStatus = () => setIsPpgStreamToggled(prev => !prev);
+  const togglePpgStreamStatus = () => setIsPpgStreamToggled((prev) => !prev);
+
+  const [isSdkModeToggled, setIsSdkModeToggled] = useState(false);
+  const toggleSdkModeStatus = () => setIsSdkModeToggled((prev) => !prev);
 
   const [devices, setDevices] = useState<Device[]>([]);
-  const [connectedDeviceId, setConnectedDeviceId] = useState<string | null>(null);
+  const [connectedDeviceId, setConnectedDeviceId] = useState<string | null>(
+    null
+  );
 
   /**
    * Scan Devices
    */
   useEffect(() => {
-    const onDeviceFound = polarEmitter.addListener(emittedEventId.SCAN_DEVICE_FOUND, device => {
-      console.log('Device found:', device);
-      // Store device in list, update state, etc.
-      setDevices(prevDevices => {
-        const exists = prevDevices.some(d => d.deviceId === device.deviceId);
-        return exists ? prevDevices : [...prevDevices, device];
-      });
-    });
+    const onDeviceFound = polarEmitter.addListener(
+      emittedEventId.SCAN_DEVICE_FOUND,
+      (device) => {
+        console.log('Device found:', device);
+        // Store device in list, update state, etc.
+        setDevices((prevDevices) => {
+          const exists = prevDevices.some(
+            (d) => d.deviceId === device.deviceId
+          );
+          return exists ? prevDevices : [...prevDevices, device];
+        });
+      }
+    );
 
-    const onScanError = polarEmitter.addListener(emittedEventId.SCAN_DEVICE_ERROR, err => {
-      console.error('Scan error:', err.message);
-    });
+    const onScanError = polarEmitter.addListener(
+      emittedEventId.SCAN_DEVICE_ERROR,
+      (err) => {
+        console.error('Scan error:', err.message);
+      }
+    );
 
-    const onScanComplete = polarEmitter.addListener(emittedEventId.SCAN_DEVICE_COMPLETE, () => {
-      console.log('Scan complete');
-    });
+    const onScanComplete = polarEmitter.addListener(
+      emittedEventId.SCAN_DEVICE_COMPLETE,
+      () => {
+        console.log('Scan complete');
+      }
+    );
 
     return () => {
       onDeviceFound.remove();
@@ -99,90 +126,178 @@ export default function App() {
    * Listen for device data stream from Android PolarBLE SDK
    */
   useEffect(() => {
-    const hrListener = polarEmitter.addListener(emittedEventId.POLAR_HR_DATA, (data) => {
-      // console.log('Received HR data:', data);
-      console.log('Heart Rate:', `${data.hr} bpm timestamp: ${formatDateYYYYMMDDHHMMSS(new Date())}`);
-      logHeartRateToCSV(data.hr).then();
-    });
+    const hrListener = polarEmitter.addListener(
+      emittedEventId.POLAR_HR_DATA,
+      (data) => {
+        // console.log('Received HR data:', data);
+        console.log(
+          'Heart Rate:',
+          `${data.hr} bpm timestamp: ${formatDateYYYYMMDDHHMMSS(new Date())}`
+        );
+        logHeartRateToCSV(data.hr).then();
+      }
+    );
 
-    const errorHrListener = polarEmitter.addListener(emittedEventId.POLAR_HR_ERROR, (error) => {
-      console.log('HR stream error:', error);
-      Alert.alert('Error', 'Polar device is yet to be detected. Try starting HR Stream again.', [{
-        text: 'OK',
-        onPress: () => {
-          console.log('OK Pressed');
-          toggleHRStreamStatus();
-          disposeHrStream();
-        },
-      }]);
-    });
+    const errorHrListener = polarEmitter.addListener(
+      emittedEventId.POLAR_HR_ERROR,
+      (error) => {
+        console.log('HR stream error:', error);
+        Alert.alert(
+          'Error',
+          'Polar device is yet to be detected. Try starting HR Stream again.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                console.log('OK Pressed');
+                toggleHRStreamStatus();
+                disposeHrStream();
+              },
+            },
+          ]
+        );
+      }
+    );
 
-    const completeHrListener = polarEmitter.addListener(emittedEventId.POLAR_HR_COMPLETE, (msg) => {
-      console.log('HR stream complete:', msg);
-    });
+    const completeHrListener = polarEmitter.addListener(
+      emittedEventId.POLAR_HR_COMPLETE,
+      (msg) => {
+        console.log('HR stream complete:', msg);
+      }
+    );
 
-    const accListener = polarEmitter.addListener(emittedEventId.POLAR_ACC_DATA, (data) => {
-      console.log('ACC Stream:', `x: ${data.accX} y: ${data.accY} z: ${data.accZ} timestamp: ${formatPolarTimestamp(data.accTimestamp)}`);
-      logAccToCSV(data.accX, data.accY, data.accZ, formatPolarTimestamp(data.accTimestamp)).then();
-    });
+    const accListener = polarEmitter.addListener(
+      emittedEventId.POLAR_ACC_DATA,
+      (data) => {
+        console.log(
+          'ACC Stream:',
+          `x: ${data.accX} y: ${data.accY} z: ${data.accZ} timestamp: ${formatPolarTimestamp(data.accTimestamp)}`
+        );
+        logAccToCSV(
+          data.accX,
+          data.accY,
+          data.accZ,
+          formatPolarTimestamp(data.accTimestamp)
+        ).then();
+      }
+    );
 
-    const errorAccListener = polarEmitter.addListener(emittedEventId.POLAR_ACC_ERROR, (error) => {
-      console.log('ACC stream error:', error);
-      Alert.alert('Error', 'Polar device is yet to be detected. Try starting ACC Stream again.', [{
-        text: 'OK',
-        onPress: () => {
-          console.log('OK Pressed');
-          toggleAccStreamStatus();
-          disposeAccStream();
-        },
-      }]);
-    });
+    const errorAccListener = polarEmitter.addListener(
+      emittedEventId.POLAR_ACC_ERROR,
+      (error) => {
+        console.log('ACC stream error:', error);
+        Alert.alert(
+          'Error',
+          'Polar device is yet to be detected. Try starting ACC Stream again.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                console.log('OK Pressed');
+                toggleAccStreamStatus();
+                disposeAccStream();
+              },
+            },
+          ]
+        );
+      }
+    );
 
-    const completeAccListener = polarEmitter.addListener(emittedEventId.POLAR_ACC_COMPLETE, (msg) => {
-      console.log('GYR stream complete:', msg);
-    });
+    const completeAccListener = polarEmitter.addListener(
+      emittedEventId.POLAR_ACC_COMPLETE,
+      (msg) => {
+        console.log('GYR stream complete:', msg);
+      }
+    );
 
-    const gyrListener = polarEmitter.addListener(emittedEventId.POLAR_GYR_DATA, (data) => {
-      console.log('GYR Stream:', `x: ${data.gyrX} y: ${data.gyrY} z: ${data.gyrZ} timestamp: ${formatPolarTimestamp(data.gyrTimestamp)}`);
-      logGyroToCSV(data.gyrX, data.gyrY, data.gyrZ, formatPolarTimestamp(data.gyrTimestamp)).then();
-    });
+    const gyrListener = polarEmitter.addListener(
+      emittedEventId.POLAR_GYR_DATA,
+      (data) => {
+        console.log(
+          'GYR Stream:',
+          `x: ${data.gyrX} y: ${data.gyrY} z: ${data.gyrZ} timestamp: ${formatPolarTimestamp(data.gyrTimestamp)}`
+        );
+        logGyroToCSV(
+          data.gyrX,
+          data.gyrY,
+          data.gyrZ,
+          formatPolarTimestamp(data.gyrTimestamp)
+        ).then();
+      }
+    );
 
-    const errorGyrListener = polarEmitter.addListener(emittedEventId.POLAR_GYR_ERROR, (error) => {
-      console.log('GYR stream error:', error);
-      Alert.alert('Error', 'Polar device is yet to be detected. Try starting GYR Stream again.', [{
-        text: 'OK',
-        onPress: () => {
-          console.log('OK Pressed');
-          toggleGyrStreamStatus();
-          disposeGyrStream();
-        },
-      }]);
-    });
+    const errorGyrListener = polarEmitter.addListener(
+      emittedEventId.POLAR_GYR_ERROR,
+      (error) => {
+        console.log('GYR stream error:', error);
+        Alert.alert(
+          'Error',
+          'Polar device is yet to be detected. Try starting GYR Stream again.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                console.log('OK Pressed');
+                toggleGyrStreamStatus();
+                disposeGyrStream();
+              },
+            },
+          ]
+        );
+      }
+    );
 
-    const completeGyrListener = polarEmitter.addListener(emittedEventId.POLAR_GYR_COMPLETE, (msg) => {
-      console.log('GYR stream complete:', msg);
-    });
+    const completeGyrListener = polarEmitter.addListener(
+      emittedEventId.POLAR_GYR_COMPLETE,
+      (msg) => {
+        console.log('GYR stream complete:', msg);
+      }
+    );
 
-    const ppgListener = polarEmitter.addListener(emittedEventId.POLAR_PPG_DATA, (data) => {
-      console.log('PPG Stream:', `ppg0: ${data.ppg0} ppg1: ${data.ppg1} ppg2: ${data.ppg2} ambient: ${data.ambient} timestamp: ${formatPolarTimestamp(data.ppgTimestamp)}`);
-      logPpgToCSV(data.ppg0, data.ppg1, data.ppg2, data.ambient, formatPolarTimestamp(data.ppgTimestamp)).then();
-    });
+    const ppgListener = polarEmitter.addListener(
+      emittedEventId.POLAR_PPG_DATA,
+      (data) => {
+        console.log(
+          'PPG Stream:',
+          `ppg0: ${data.ppg0} ppg1: ${data.ppg1} ppg2: ${data.ppg2} ambient: ${data.ambient} timestamp: ${formatPolarTimestamp(data.ppgTimestamp)}`
+        );
+        logPpgToCSV(
+          data.ppg0,
+          data.ppg1,
+          data.ppg2,
+          data.ambient,
+          formatPolarTimestamp(data.ppgTimestamp)
+        ).then();
+      }
+    );
 
-    const errorPpgListener = polarEmitter.addListener(emittedEventId.POLAR_PPG_ERROR, (error) => {
-      console.log('PPG stream error:', error);
-      Alert.alert('Error', 'Polar device is yet to be detected. Try starting PPG Stream again.', [{
-        text: 'OK',
-        onPress: () => {
-          console.log('OK Pressed');
-          togglePpgStreamStatus();
-          disposePpgStream();
-        },
-      }]);
-    });
+    const errorPpgListener = polarEmitter.addListener(
+      emittedEventId.POLAR_PPG_ERROR,
+      (error) => {
+        console.log('PPG stream error:', error);
+        Alert.alert(
+          'Error',
+          'Polar device is yet to be detected. Try starting PPG Stream again.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                console.log('OK Pressed');
+                togglePpgStreamStatus();
+                disposePpgStream();
+              },
+            },
+          ]
+        );
+      }
+    );
 
-    const completePpgListener = polarEmitter.addListener(emittedEventId.POLAR_PPG_COMPLETE, (msg) => {
-      console.log('PPG stream complete:', msg);
-    });
+    const completePpgListener = polarEmitter.addListener(
+      emittedEventId.POLAR_PPG_COMPLETE,
+      (msg) => {
+        console.log('PPG stream complete:', msg);
+      }
+    );
 
     return () => {
       hrListener.remove();
@@ -209,37 +324,37 @@ export default function App() {
   // };
 
   const handleFetchHrData = () => {
-    if(connectedDeviceId != null){
+    if (connectedDeviceId != null) {
       toggleHRStreamStatus();
       fetchHrData(connectedDeviceId);
-    } else{
+    } else {
       displayDialogNoConnectedDevice();
     }
   };
 
   const handleFetchAccData = () => {
-    if(connectedDeviceId != null){
+    if (connectedDeviceId != null) {
       toggleAccStreamStatus();
       fetchAccData(connectedDeviceId);
-    } else{
+    } else {
       displayDialogNoConnectedDevice();
     }
   };
 
   const handleFetchGyrData = () => {
-    if(connectedDeviceId != null){
+    if (connectedDeviceId != null) {
       toggleGyrStreamStatus();
       fetchGyrData(connectedDeviceId);
-    } else{
+    } else {
       displayDialogNoConnectedDevice();
     }
   };
 
   const handleFetchPpgData = () => {
-    if(connectedDeviceId != null){
+    if (connectedDeviceId != null) {
       togglePpgStreamStatus();
       fetchPpgData(connectedDeviceId);
-    } else{
+    } else {
       displayDialogNoConnectedDevice();
     }
   };
@@ -249,96 +364,156 @@ export default function App() {
     scanDevices();
   };
 
+  const handleSdkMode = () => {
+    if (connectedDeviceId != null) {
+      toggleSdkModeStatus();
+      if(isSdkModeToggled) {
+        disableSdkMode(connectedDeviceId);
+      } else {
+        enableSdkMode(connectedDeviceId);
+      }
+    } else {
+      displayDialogNoConnectedDevice();
+    }
+  };
+
+  const stopAllStream = () => {
+    if (isHRStreamToggled) handleFetchHrData(); // Stop HR stream if running
+    if (isAccStreamToggled) handleFetchAccData(); // Stop ACC stream if running
+    if (isGyrStreamToggled) handleFetchGyrData(); // Stop GYR stream if running
+    if (isPpgStreamToggled) handleFetchPpgData(); // Stop PPG stream if running
+  };
+
   return (
     <View style={styles.container}>
       {/*<Text>Result: {result}</Text>*/}
       <View style={styles.buttonContainer}>
-        <Button title={`Connect ${deviceId}`} onPress={
-          handleConnect
-        }/>
+        <Button title={`Connect ${deviceId}`} onPress={handleConnect} />
       </View>
       {/*<View style={styles.buttonContainer}>*/}
       {/*  <Button title="Disconnect" onPress={handleDisconnect}/></View>*/}
       <View style={styles.buttonContainer}>
-        <Button title={devices.length > 0 ? "Clear Scanned Devices" : "Scan Devices"} onPress={() => {
-          handleScanDevices();
-        }}/></View>
+        <Button
+          title={devices.length > 0 ? 'Clear Scanned Devices' : 'Scan Devices'}
+          onPress={() => {
+            handleScanDevices();
+          }}
+        />
+      </View>
       {devices.length > 0 && (
         <View style={{ marginTop: 30, width: '100%' }}>
-          <Text style={{ fontWeight: 'bold', marginBottom: 10 }}>Scanned Devices:</Text>
-          {devices.map(device => {
-              const isConnected = connectedDeviceId === device.deviceId;
-              return (
-                <View key={device.deviceId}
-                      style={styles.deviceItem}>
-                  <View>
-                    <Text>ID: {device.deviceId}</Text>
-                    <Text>Name: {device.name || 'N/A'}</Text>
-                    <Text>RSSI: {device.rssi || 'N/A'}</Text>
-                  </View>
-                  <Button title={isConnected ? 'Disconnect' : 'Connect'}
-                          onPress={() => {
-                            if (isConnected) {
-                              if(isHRStreamToggled) handleFetchHrData(); // Stop HR stream if running
-                              if(isAccStreamToggled) handleFetchAccData(); // Stop ACC stream if running
-                              if(isGyrStreamToggled) handleFetchGyrData(); // Stop GYR stream if running
-                              if(isPpgStreamToggled) handleFetchPpgData(); // Stop PPG stream if running
-                              disconnectFromDevice(device.deviceId);
-                              setConnectedDeviceId(null);
-                            } else {
-                              if (connectedDeviceId && connectedDeviceId !== device.deviceId) {
-                                if(isHRStreamToggled) handleFetchHrData(); // Stop HR stream if running
-                                if(isAccStreamToggled) handleFetchAccData(); // Stop ACC stream if running
-                                if(isGyrStreamToggled) handleFetchGyrData(); // Stop GYR stream if running
-                                if(isPpgStreamToggled) handleFetchPpgData(); // Stop PPG stream if running
-                                disconnectFromDevice(connectedDeviceId);
-                              }
-                              connectToDevice(device.deviceId);
-                              setConnectedDeviceId(device.deviceId);
-                            }
-                          }}/>
+          <Text style={{ fontWeight: 'bold', marginBottom: 10 }}>
+            Scanned Devices:
+          </Text>
+          {devices.map((device) => {
+            const isConnected = connectedDeviceId === device.deviceId;
+            return (
+              <View key={device.deviceId} style={styles.deviceItem}>
+                <View>
+                  <Text>ID: {device.deviceId}</Text>
+                  <Text>Name: {device.name || 'N/A'}</Text>
+                  <Text>RSSI: {device.rssi || 'N/A'}</Text>
                 </View>
-              );
-            }
-          )}
+                <Button
+                  title={isConnected ? 'Disconnect' : 'Connect'}
+                  onPress={() => {
+                    if (isConnected) {
+                      // Disable SDK Mode if enabled
+                      if(isSdkModeToggled) handleSdkMode();
+                      stopAllStream();
+                      disconnectFromDevice(device.deviceId);
+                      setConnectedDeviceId(null);
+                    } else {
+                      if (
+                        connectedDeviceId &&
+                        connectedDeviceId !== device.deviceId
+                      ) {
+                        // Disable SDK Mode if enabled
+                        if(isSdkModeToggled) handleSdkMode();
+                        stopAllStream();
+                        disconnectFromDevice(connectedDeviceId);
+                      }
+                      connectToDevice(device.deviceId);
+                      setConnectedDeviceId(device.deviceId);
+                    }
+                  }}
+                />
+              </View>
+            );
+          })}
         </View>
       )}
       <View style={styles.buttonContainer}>
-        <Button title={isHRStreamToggled ? 'Stop Streaming HR Data' : 'Start Streaming HR Data'}
-                onPress={() => {
-                  if (isHRStreamToggled){
-                    toggleHRStreamStatus();
-                    disposeHrStream();
-                  }
-                  else handleFetchHrData();
-                }}/></View>
+        <Button
+          title={isSdkModeToggled ? 'Disable SDK Mode' : 'Enable SDK Mode'}
+          onPress={() => {
+            // Dispose all existing streams. SDK mode enable command stops all the streams
+            // but client is not informed. This is workaround for the bug.
+            stopAllStream();
+            handleSdkMode();
+          }}
+        />
+      </View>
       <View style={styles.buttonContainer}>
-        <Button title={isAccStreamToggled ? 'Stop Streaming ACC Data' : 'Start Streaming ACC Data'}
-                onPress={() => {
-                  if (isAccStreamToggled){
-                    toggleAccStreamStatus();
-                    disposeAccStream();
-                  }
-                  else handleFetchAccData();
-                }}/></View>
+        <Button
+          title={
+            isHRStreamToggled
+              ? 'Stop Streaming HR Data'
+              : 'Start Streaming HR Data'
+          }
+          onPress={() => {
+            if (isHRStreamToggled) {
+              toggleHRStreamStatus();
+              disposeHrStream();
+            } else handleFetchHrData();
+          }}
+        />
+      </View>
       <View style={styles.buttonContainer}>
-        <Button title={isGyrStreamToggled ? 'Stop Streaming GYR Data' : 'Start Streaming GYR Data'}
-                onPress={() => {
-                  if (isGyrStreamToggled){
-                    toggleGyrStreamStatus();
-                    disposeGyrStream();
-                  }
-                  else handleFetchGyrData();
-                }}/></View>
+        <Button
+          title={
+            isAccStreamToggled
+              ? 'Stop Streaming ACC Data'
+              : 'Start Streaming ACC Data'
+          }
+          onPress={() => {
+            if (isAccStreamToggled) {
+              toggleAccStreamStatus();
+              disposeAccStream();
+            } else handleFetchAccData();
+          }}
+        />
+      </View>
       <View style={styles.buttonContainer}>
-        <Button title={isPpgStreamToggled ? 'Stop Streaming PPG Data' : 'Start Streaming PPG Data'}
-                onPress={() => {
-                  if (isPpgStreamToggled){
-                    togglePpgStreamStatus();
-                    disposePpgStream();
-                  }
-                  else handleFetchPpgData();
-                }}/></View>
+        <Button
+          title={
+            isGyrStreamToggled
+              ? 'Stop Streaming GYR Data'
+              : 'Start Streaming GYR Data'
+          }
+          onPress={() => {
+            if (isGyrStreamToggled) {
+              toggleGyrStreamStatus();
+              disposeGyrStream();
+            } else handleFetchGyrData();
+          }}
+        />
+      </View>
+      <View style={styles.buttonContainer}>
+        <Button
+          title={
+            isPpgStreamToggled
+              ? 'Stop Streaming PPG Data'
+              : 'Start Streaming PPG Data'
+          }
+          onPress={() => {
+            if (isPpgStreamToggled) {
+              togglePpgStreamStatus();
+              disposePpgStream();
+            } else handleFetchPpgData();
+          }}
+        />
+      </View>
       {/*<View style={styles.buttonContainer}>*/}
       {/*  <Button title="Request Bluetooth Permission" onPress={ requestBluetoothPermissions }/></View>*/}
     </View>
@@ -418,5 +593,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ccc',
     borderRadius: 5,
-  }
+  },
 });

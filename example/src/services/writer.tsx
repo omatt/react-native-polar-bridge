@@ -1,5 +1,5 @@
-import RNFS from "react-native-fs";
-import {formatDateYYYYMMDDHHMMSS} from "./utils";
+import RNFS from 'react-native-fs';
+import { formatDateYYYYMMDDHHMMSS } from './utils';
 
 export async function logHeartRateToCSV(hr: number) {
   const csvFilePath = `${RNFS.DownloadDirectoryPath}/polar_heart_rate_log.csv`;
@@ -18,13 +18,20 @@ export async function logHeartRateToCSV(hr: number) {
       await RNFS.appendFile(csvFilePath, csvHrLine, 'utf8');
     }
 
-    console.log(`✅ Logged HR to CSV: ${csvHrLine.trim()} on path: ${csvFilePath}`);
+    console.log(
+      `✅ Logged HR to CSV: ${csvHrLine.trim()} on path: ${csvFilePath}`
+    );
   } catch (error) {
     console.error('❌ Failed to log HR to CSV:', error);
   }
 }
 
-export async function logAccToCSV(x: number, y: number, z: number, timestamp: String) {
+export async function logAccToCSV(
+  x: number,
+  y: number,
+  z: number,
+  timestamp: String
+) {
   const csvFilePath = `${RNFS.DownloadDirectoryPath}/polar_accelerometer_log.csv`;
   const csvAccLine = `${timestamp},${x},${y},${z}\n`;
 
@@ -40,13 +47,20 @@ export async function logAccToCSV(x: number, y: number, z: number, timestamp: St
       await RNFS.appendFile(csvFilePath, csvAccLine, 'utf8');
     }
 
-    console.log(`✅ Logged ACC to CSV: ${csvAccLine.trim()} on path: ${csvFilePath}`);
+    console.log(
+      `✅ Logged ACC to CSV: ${csvAccLine.trim()} on path: ${csvFilePath}`
+    );
   } catch (error) {
     console.error('❌ Failed to log ACC to CSV:', error);
   }
 }
 
-export async function logGyroToCSV(x: number, y: number, z: number, timestamp: String) {
+export async function logGyroToCSV(
+  x: number,
+  y: number,
+  z: number,
+  timestamp: String
+) {
   const csvFilePath = `${RNFS.DownloadDirectoryPath}/polar_gyro_log.csv`;
   const csvGyrLine = `${timestamp},${x},${y},${z}\n`;
 
@@ -62,13 +76,21 @@ export async function logGyroToCSV(x: number, y: number, z: number, timestamp: S
       await RNFS.appendFile(csvFilePath, csvGyrLine, 'utf8');
     }
 
-    console.log(`✅ Logged GYR to CSV: ${csvGyrLine.trim()} on path: ${csvFilePath}`);
+    console.log(
+      `✅ Logged GYR to CSV: ${csvGyrLine.trim()} on path: ${csvFilePath}`
+    );
   } catch (error) {
     console.error('❌ Failed to log GYR to CSV:', error);
   }
 }
 
-export async function logPpgToCSV(ppg0: number, ppg1: number, ppg2: number, ambient: number, timestamp: String) {
+export async function logPpgToCSV(
+  ppg0: number,
+  ppg1: number,
+  ppg2: number,
+  ambient: number,
+  timestamp: String
+) {
   const csvFilePath = `${RNFS.DownloadDirectoryPath}/polar_ppg_log.csv`;
   const csvGyrLine = `${timestamp},${ppg0},${ppg1},${ppg2},${ambient}\n`;
 
@@ -84,7 +106,9 @@ export async function logPpgToCSV(ppg0: number, ppg1: number, ppg2: number, ambi
       await RNFS.appendFile(csvFilePath, csvGyrLine, 'utf8');
     }
 
-    console.log(`✅ Logged PPG to CSV: ${csvGyrLine.trim()} on path: ${csvFilePath}`);
+    console.log(
+      `✅ Logged PPG to CSV: ${csvGyrLine.trim()} on path: ${csvFilePath}`
+    );
   } catch (error) {
     console.error('❌ Failed to log PPG to CSV:', error);
   }

@@ -9,6 +9,8 @@ export interface Spec extends TurboModule {
   fetchAccData(deviceId: string): void;
   fetchGyrData(deviceId: string): void;
   fetchPpgData(deviceId: string): void;
+  enableSdkMode(deviceId: string): void;
+  disableSdkMode(deviceId: string): void;
   scanDevices(): void;
   disposeHrStream(): void;
   disposeAccStream(): void;
