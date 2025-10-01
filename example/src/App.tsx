@@ -8,7 +8,7 @@ import {
   type Permission,
   NativeModules,
   NativeEventEmitter,
-  Alert,
+  Alert, ScrollView, Switch,
 } from 'react-native';
 import {
   connectToDevice,
@@ -23,13 +23,22 @@ import {
   fetchGyrData,
   disposePpgStream,
   fetchPpgData,
-  enableSdkMode, disableSdkMode, getDeviceTime, setDeviceTime,
+  enableSdkMode,
+  disableSdkMode,
+  getDeviceTime,
+  setDeviceTime,
+  setPolarRecordingTrigger,
+  OfflineRecordingTriggerMode,
+  getDiskSpace,
+  OfflineRecordingFeature,
+  fetchOfflineRecordings,
+  deleteAllOfflineRecordings,
 } from 'react-native-polar-bridge';
 import { useEffect, useState } from 'react';
 
 import {
   formatDateYYYYMMDDHHMMSS,
-  formatPolarTimestamp,
+  formatPolarTimestamp, formatPolarTimestampToUnixTimeStamp,
 } from './services/utils';
 import {
   logAccToCSV,
@@ -83,6 +92,17 @@ export default function App() {
     null
   );
 
+  const [isLogCSVEnabled, setIsLogCSVEnabled] = useState(false);
+  const toggleLogCSVSwitch = () => setIsLogCSVEnabled(prev => !prev);
+
+  const offlineRecordingFeatureList = [OfflineRecordingFeature.OFFLINE_HR,
+    OfflineRecordingFeature.OFFLINE_ACC,
+    OfflineRecordingFeature.OFFLINE_GYR,
+    OfflineRecordingFeature.OFFLINE_PPG,
+    // OfflineRecordingFeature.OFFLINE_MAG,
+    // OfflineRecordingFeature.OFFLINE_PPI
+  ];
+
   /**
    * Scan Devices
    */
@@ -134,7 +154,9 @@ export default function App() {
           'Heart Rate:',
           `${data.hr} bpm timestamp: ${formatDateYYYYMMDDHHMMSS(new Date())}`
         );
-        logHeartRateToCSV(data.hr).then();
+        if(isLogCSVEnabled) {
+          logHeartRateToCSV(data.hr).then();
+        }
       }
     );
 
@@ -173,12 +195,9 @@ export default function App() {
           'ACC Stream:',
           `x: ${data.accX} y: ${data.accY} z: ${data.accZ} timestamp: ${formatPolarTimestamp(data.accTimestamp)}`
         );
-        logAccToCSV(
-          data.accX,
-          data.accY,
-          data.accZ,
-          formatPolarTimestamp(data.accTimestamp)
-        ).then();
+        if(isLogCSVEnabled) {
+          logAccToCSV(data.accX, data.accY, data.accZ, `${formatPolarTimestampToUnixTimeStamp(data.accTimestamp)}`).then();
+        }
       }
     );
 
@@ -217,12 +236,9 @@ export default function App() {
           'GYR Stream:',
           `x: ${data.gyrX} y: ${data.gyrY} z: ${data.gyrZ} timestamp: ${formatPolarTimestamp(data.gyrTimestamp)}`
         );
-        logGyroToCSV(
-          data.gyrX,
-          data.gyrY,
-          data.gyrZ,
-          formatPolarTimestamp(data.gyrTimestamp)
-        ).then();
+        if(isLogCSVEnabled){
+          logGyroToCSV(data.gyrX, data.gyrY, data.gyrZ, `${formatPolarTimestampToUnixTimeStamp(data.gyrTimestamp)}`).then();
+        }
       }
     );
 
@@ -261,13 +277,9 @@ export default function App() {
           'PPG Stream:',
           `ppg0: ${data.ppg0} ppg1: ${data.ppg1} ppg2: ${data.ppg2} ambient: ${data.ambient} timestamp: ${formatPolarTimestamp(data.ppgTimestamp)}`
         );
-        logPpgToCSV(
-          data.ppg0,
-          data.ppg1,
-          data.ppg2,
-          data.ambient,
-          formatPolarTimestamp(data.ppgTimestamp)
-        ).then();
+        if(isLogCSVEnabled) {
+          logPpgToCSV(data.ppg0, data.ppg1, data.ppg2, data.ambient, `${formatPolarTimestampToUnixTimeStamp(data.ppgTimestamp)}`).then();
+        }
       }
     );
 
@@ -309,6 +321,13 @@ export default function App() {
       }
     );
 
+    const deviceDiskSpace = polarEmitter.addListener(
+      emittedEventId.POLAR_DISK_SPACE,
+      (data) => {
+        console.log('Polar Disk Space', `Disk space: ${data.freeSpace} / ${data.totalSpace} Bytes`);
+      }
+    );
+
     return () => {
       hrListener.remove();
       errorHrListener.remove();
@@ -323,8 +342,9 @@ export default function App() {
       errorPpgListener.remove();
       completePpgListener.remove();
       deviceTimeListener.remove();
+      deviceDiskSpace.remove();
     };
-  }, []);
+  }, [isLogCSVEnabled]);
 
   const handleConnect = () => {
     connectToDevice(deviceId);
@@ -396,162 +416,238 @@ export default function App() {
   };
 
   return (
-    <View style={styles.container}>
-      {/*<Text>Result: {result}</Text>*/}
-      <View style={styles.buttonContainer}>
-        <Button title={`Connect ${deviceId}`} onPress={handleConnect} />
-      </View>
-      {/*<View style={styles.buttonContainer}>*/}
-      {/*  <Button title="Disconnect" onPress={handleDisconnect}/></View>*/}
-      <View style={styles.buttonContainer}>
-        <Button
-          title={devices.length > 0 ? 'Clear Scanned Devices' : 'Scan Devices'}
-          onPress={() => {
-            handleScanDevices();
-          }}
-        />
-      </View>
-      {devices.length > 0 && (
-        <View style={{ marginTop: 30, width: '100%' }}>
-          <Text style={{ fontWeight: 'bold', marginBottom: 10 }}>
-            Scanned Devices:
-          </Text>
-          {devices.map((device) => {
-            const isConnected = connectedDeviceId === device.deviceId;
-            return (
-              <View key={device.deviceId} style={styles.deviceItem}>
-                <View>
-                  <Text>ID: {device.deviceId}</Text>
-                  <Text>Name: {device.name || 'N/A'}</Text>
-                  <Text>RSSI: {device.rssi || 'N/A'}</Text>
-                </View>
-                <Button
-                  title={isConnected ? 'Disconnect' : 'Connect'}
-                  onPress={() => {
-                    if (isConnected) {
-                      // Disable SDK Mode if enabled
-                      if(isSdkModeToggled) handleSdkMode();
-                      stopAllStream();
-                      disconnectFromDevice(device.deviceId);
-                      setConnectedDeviceId(null);
-                    } else {
-                      if (
-                        connectedDeviceId &&
-                        connectedDeviceId !== device.deviceId
-                      ) {
+    <ScrollView style={styles.scrollContainer}>
+      <View style={styles.container}>
+        {/*<Text>Result: {result}</Text>*/}
+        <View style={styles.buttonContainer}>
+          <Button title={`Connect ${deviceId}`} onPress={handleConnect} />
+        </View>
+        {/*<View style={styles.buttonContainer}>*/}
+        {/*  <Button title="Disconnect" onPress={handleDisconnect}/></View>*/}
+        <View style={styles.buttonContainer}>
+          <Button
+            title={devices.length > 0 ? 'Clear Scanned Devices' : 'Scan Devices'}
+            onPress={() => {
+              handleScanDevices();
+            }}
+          />
+        </View>
+        {devices.length > 0 && (
+          <View style={{ marginTop: 30, width: '100%' }}>
+            <Text style={{ fontWeight: 'bold', marginBottom: 10 }}>
+              Scanned Devices:
+            </Text>
+            {devices.map((device) => {
+              const isConnected = connectedDeviceId === device.deviceId;
+              return (
+                <View key={device.deviceId} style={styles.deviceItem}>
+                  <View>
+                    <Text>ID: {device.deviceId}</Text>
+                    <Text>Name: {device.name || 'N/A'}</Text>
+                    <Text>RSSI: {device.rssi || 'N/A'}</Text>
+                  </View>
+                  <Button
+                    title={isConnected ? 'Disconnect' : 'Connect'}
+                    onPress={() => {
+                      if (isConnected) {
                         // Disable SDK Mode if enabled
                         if(isSdkModeToggled) handleSdkMode();
                         stopAllStream();
-                        disconnectFromDevice(connectedDeviceId);
+                        disconnectFromDevice(device.deviceId);
+                        setConnectedDeviceId(null);
+                      } else {
+                        if (
+                          connectedDeviceId &&
+                          connectedDeviceId !== device.deviceId
+                        ) {
+                          // Disable SDK Mode if enabled
+                          if(isSdkModeToggled) handleSdkMode();
+                          stopAllStream();
+                          disconnectFromDevice(connectedDeviceId);
+                        }
+                        connectToDevice(device.deviceId);
+                        setConnectedDeviceId(device.deviceId);
                       }
-                      connectToDevice(device.deviceId);
-                      setConnectedDeviceId(device.deviceId);
-                    }
-                  }}
-                />
-              </View>
-            );
-          })}
+                    }}
+                  />
+                </View>
+              );
+            })}
+          </View>
+        )}
+        <View style={styles.buttonContainer}>
+          <Button
+            title={isSdkModeToggled ? 'Disable SDK Mode' : 'Enable SDK Mode'}
+            onPress={() => {
+              // Dispose all existing streams. SDK mode enable command stops all the streams
+              // but client is not informed. This is workaround for the bug.
+              stopAllStream();
+              handleSdkMode();
+            }}
+          />
         </View>
-      )}
-      <View style={styles.buttonContainer}>
-        <Button
-          title={isSdkModeToggled ? 'Disable SDK Mode' : 'Enable SDK Mode'}
-          onPress={() => {
-            // Dispose all existing streams. SDK mode enable command stops all the streams
-            // but client is not informed. This is workaround for the bug.
-            stopAllStream();
-            handleSdkMode();
-          }}
-        />
-      </View>
-      <View style={styles.buttonContainer}>
-        <Button
-          title={
-            isHRStreamToggled
-              ? 'Stop Streaming HR Data'
-              : 'Start Streaming HR Data'
-          }
-          onPress={() => {
-            if (isHRStreamToggled) {
-              toggleHRStreamStatus();
-              disposeHrStream();
-            } else handleFetchHrData();
-          }}
-        />
-      </View>
-      <View style={styles.buttonContainer}>
-        <Button
-          title={
-            isAccStreamToggled
-              ? 'Stop Streaming ACC Data'
-              : 'Start Streaming ACC Data'
-          }
-          onPress={() => {
-            if (isAccStreamToggled) {
-              toggleAccStreamStatus();
-              disposeAccStream();
-            } else handleFetchAccData();
-          }}
-        />
-      </View>
-      <View style={styles.buttonContainer}>
-        <Button
-          title={
-            isGyrStreamToggled
-              ? 'Stop Streaming GYR Data'
-              : 'Start Streaming GYR Data'
-          }
-          onPress={() => {
-            if (isGyrStreamToggled) {
-              toggleGyrStreamStatus();
-              disposeGyrStream();
-            } else handleFetchGyrData();
-          }}
-        />
-      </View>
-      <View style={styles.buttonContainer}>
-        <Button
-          title={
-            isPpgStreamToggled
-              ? 'Stop Streaming PPG Data'
-              : 'Start Streaming PPG Data'
-          }
-          onPress={() => {
-            if (isPpgStreamToggled) {
-              togglePpgStreamStatus();
-              disposePpgStream();
-            } else handleFetchPpgData();
-          }}
-        />
-      </View>
-      <View style={styles.buttonContainer}>
-        <Button
-          title='Set Device Time'
-          onPress={() => {
-            if (connectedDeviceId != null) {
-              setDeviceTime(connectedDeviceId);
-            } else {
-              displayDialogNoConnectedDevice();
+        <View style={styles.switchContainer}>
+          <Switch
+            trackColor={{false: '#767577', true: '#81b0ff'}}
+            thumbColor={isLogCSVEnabled ? '#f5dd4b' : '#f4f3f4'}
+            ios_backgroundColor="#3e3e3e"
+            onValueChange={toggleLogCSVSwitch}
+            value={isLogCSVEnabled}
+          />
+          <Text style={styles.label}>Store Stream into CSV</Text>
+        </View>
+        <View style={styles.buttonContainer}>
+          <Button
+            title={
+              isHRStreamToggled
+                ? 'Stop Streaming HR Data'
+                : 'Start Streaming HR Data'
             }
-          }}
-        />
-      </View>
-      <View style={styles.buttonContainer}>
-        <Button
-          title='Get Device Time'
-          onPress={() => {
-            if (connectedDeviceId != null) {
-              getDeviceTime(connectedDeviceId);
-            } else {
-              displayDialogNoConnectedDevice();
+            onPress={() => {
+              if (isHRStreamToggled) {
+                toggleHRStreamStatus();
+                disposeHrStream();
+              } else handleFetchHrData();
+            }}
+          />
+        </View>
+        <View style={styles.buttonContainer}>
+          <Button
+            title={
+              isAccStreamToggled
+                ? 'Stop Streaming ACC Data'
+                : 'Start Streaming ACC Data'
             }
-          }}
-        />
+            onPress={() => {
+              if (isAccStreamToggled) {
+                toggleAccStreamStatus();
+                disposeAccStream();
+              } else handleFetchAccData();
+            }}
+          />
+        </View>
+        <View style={styles.buttonContainer}>
+          <Button
+            title={
+              isGyrStreamToggled
+                ? 'Stop Streaming GYR Data'
+                : 'Start Streaming GYR Data'
+            }
+            onPress={() => {
+              if (isGyrStreamToggled) {
+                toggleGyrStreamStatus();
+                disposeGyrStream();
+              } else handleFetchGyrData();
+            }}
+          />
+        </View>
+        <View style={styles.buttonContainer}>
+          <Button
+            title={
+              isPpgStreamToggled
+                ? 'Stop Streaming PPG Data'
+                : 'Start Streaming PPG Data'
+            }
+            onPress={() => {
+              if (isPpgStreamToggled) {
+                togglePpgStreamStatus();
+                disposePpgStream();
+              } else handleFetchPpgData();
+            }}
+          />
+        </View>
+        <View style={styles.buttonContainer}>
+          <Button
+            title='Set Device Time'
+            onPress={() => {
+              if (connectedDeviceId != null) {
+                setDeviceTime(connectedDeviceId);
+              } else {
+                displayDialogNoConnectedDevice();
+              }
+            }}
+          />
+        </View>
+        <View style={styles.buttonContainer}>
+          <Button
+            title='Get Device Time'
+            onPress={() => {
+              if (connectedDeviceId != null) {
+                getDeviceTime(connectedDeviceId);
+              } else {
+                displayDialogNoConnectedDevice();
+              }
+            }}
+          />
+        </View>
+        <View style={styles.buttonContainer}>
+          <Button
+            title='Get Disk Space'
+            onPress={() => {
+              if (connectedDeviceId != null) {
+                getDiskSpace(connectedDeviceId);
+              } else {
+                displayDialogNoConnectedDevice();
+              }
+            }}
+          />
+        </View>
+        <View style={styles.buttonContainer}>
+          <Button
+            title='Get Offline Recordings'
+            onPress={() => {
+              if (connectedDeviceId != null) {
+                fetchOfflineRecordings(connectedDeviceId);
+              } else {
+                displayDialogNoConnectedDevice();
+              }
+            }}
+          />
+        </View>
+        <View style={styles.buttonContainer}>
+          <Button
+            title='Delete All Offline Recordings'
+            onPress={() => {
+              if (connectedDeviceId != null) {
+                deleteAllOfflineRecordings(connectedDeviceId);
+              } else {
+                displayDialogNoConnectedDevice();
+              }
+            }}
+          />
+        </View>
+        <View style={styles.buttonContainer}>
+          <Button
+            title='Enable Recording Trigger'
+            onPress={() => {
+              if (connectedDeviceId != null) {
+                setPolarRecordingTrigger(connectedDeviceId,
+                  OfflineRecordingTriggerMode.TRIGGER_SYSTEM_START,
+                  offlineRecordingFeatureList);
+              } else {
+                displayDialogNoConnectedDevice();
+              }
+            }}
+          />
+        </View>
+        <View style={styles.buttonContainer}>
+          <Button
+            title='Disable Recording Trigger'
+            onPress={() => {
+              if (connectedDeviceId != null) {
+                setPolarRecordingTrigger(connectedDeviceId,
+                  OfflineRecordingTriggerMode.TRIGGER_DISABLED,
+                  offlineRecordingFeatureList);
+              } else {
+                displayDialogNoConnectedDevice();
+              }
+            }}
+          />
+        </View>
+        {/*<View style={styles.buttonContainer}>*/}
+        {/*  <Button title="Request Bluetooth Permission" onPress={ requestBluetoothPermissions }/></View>*/}
       </View>
-      {/*<View style={styles.buttonContainer}>*/}
-      {/*  <Button title="Request Bluetooth Permission" onPress={ requestBluetoothPermissions }/></View>*/}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -612,6 +708,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 20,
     backgroundColor: '#FFF',
+  },
+
+  scrollContainer: {
+    flex: 1,
+    backgroundColor: '#FFF'
+  },
+
+  switchContainer: {
+    marginTop: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+
+  label: {
+    fontSize: 16,
+    color: '#000',
   },
 
   buttonContainer: {
