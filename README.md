@@ -150,6 +150,79 @@ const ppgListener = polarEmitter.addListener(emittedEventId.POLAR_PPG_DATA, (dat
 });
 ```
 
+### Offline Recording Trigger
+
+Offline recording can be initiated with `PolarBleApi.startOfflineRecording()`. With recording trigger, we can configure the Polar device to start the recording either on exercise start with `TRIGGER_EXERCISE_START` or when the Polar device has been turned on with `TRIGGER_SYSTEM_START`.
+
+```js
+// Configure features needed in the offline recording
+// List of available recording feature, feature availability may depend on the Polar device
+const offlineRecordingFeatureList = [OfflineRecordingFeature.OFFLINE_HR,
+  OfflineRecordingFeature.OFFLINE_ACC,
+  OfflineRecordingFeature.OFFLINE_GYR,
+  OfflineRecordingFeature.OFFLINE_PPG,
+  OfflineRecordingFeature.OFFLINE_MAG,
+  OfflineRecordingFeature.OFFLINE_PPI
+];
+
+setPolarRecordingTrigger(connectedDeviceId,
+  OfflineRecordingTriggerMode.TRIGGER_SYSTEM_START,
+  offlineRecordingFeatureList);
+```
+
+To disable offline recording trigger, set `TRIGGER_DISABLED`
+
+```js
+setPolarRecordingTrigger(connectedDeviceId,
+  OfflineRecordingTriggerMode.TRIGGER_DISABLED,
+  offlineRecordingFeatureList);
+```
+
+### SDK Mode
+
+Enabling SDK mode on supported Polar devices gives more sampling rate and range options. See [Polar documentation](https://github.com/polarofficial/polar-ble-sdk/blob/master/documentation/products/PolarVeritySense.md#sdk-mode-capabilities-in-polar-verity-sense) for more details.
+
+```js
+enableSdkMode(connectedDeviceId);
+disableSdkMode(connectedDeviceId);
+```
+
+### Device Time
+
+Set the time on Polar device using the current time set on the smartphone.
+
+```js
+setDeviceTime(connectedDeviceId);
+```
+
+Fetch the time on the Polar device. `data.timeMs` is in unixTime in milliseconds.
+
+```js
+getDeviceTime(connectedDeviceId);
+
+polarEmitter.addListener(
+  emittedEventId.POLAR_DEVICE_TIME,
+  (data) => {
+    console.log('Polar Device Time', `${data.time} ms: ${data.timeMs}`);
+  }
+);
+```
+
+### Disk Space
+
+Supported Polar devices can store offline recordings on its storage and remaining storage space can be tracked using this API.
+
+```js
+getDiskSpace(connectedDeviceId);
+
+polarEmitter.addListener(
+  emittedEventId.POLAR_DISK_SPACE,
+  (data) => {
+    console.log('Polar Disk Space', `Disk space: ${data.freeSpace} / ${data.totalSpace} Bytes`);
+  }
+);
+```
+
 ## Contributing
 
 See the [contributing guide](CONTRIBUTING.md) to learn how to contribute to the repository and the development workflow.
