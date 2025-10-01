@@ -53,10 +53,16 @@ export const timezone = new Intl.DateTimeFormat('en-US', {
   .split(' ')
   .pop();
 
+
+// Polar timestamp is represented in nanoseconds since 2020-01-01 00:00:00
+// See: https://github.com/polarofficial/polar-ble-sdk/blob/master/documentation/TimeSystemExplained.md
+const basePolarTime = 946684800000;
 export const formatPolarTimestamp = (polarTimestamp) => {
-  // Polar timestamp is represented in nanoseconds since 2020-01-01 00:00:00
-  // See: https://github.com/polarofficial/polar-ble-sdk/blob/master/documentation/TimeSystemExplained.md
-  const basePolarTime = 946681200000;
   const polarTimestampMs = polarTimestamp / 1000000; // Convert from nanoseconds to milliseconds
   return formatDateYYYYMMDDHHMMSS(polarTimestampMs + basePolarTime);
 };
+
+export const formatPolarTimestampToUnixTimeStamp = (polarTimestamp) => {
+  const polarTimestampMs = polarTimestamp / 1000000; // Convert from nanoseconds to milliseconds
+  return polarTimestampMs + basePolarTime;
+}
