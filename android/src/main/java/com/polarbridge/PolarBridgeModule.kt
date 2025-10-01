@@ -16,6 +16,7 @@ import com.facebook.react.modules.core.DeviceEventManagerModule
 import io.reactivex.rxjava3.core.Flowable
 import io.reactivex.rxjava3.core.Single
 import java.util.*
+import java.util.concurrent.atomic.AtomicInteger
 
 @ReactModule(name = PolarBridgeModule.NAME)
 class PolarBridgeModule(reactContext: ReactApplicationContext) :
@@ -119,6 +120,195 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  override fun setPolarRecordingTrigger(deviceId: String, recordingMode: Double, features: ReadableArray) {
+    Log.e(TAG, "Set Offline Recording Trigger on device: $deviceId, Recording Mode: $recordingMode")
+
+    // Placeholder recording secret key for Offline Recording
+    val yourSecret = PolarRecordingSecret(
+      byteArrayOf(
+        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
+        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07
+      )
+    )
+
+    // Check for configured trigger mode
+    val recordingTrigger = when (recordingMode.toInt()) {
+      0 -> PolarOfflineRecordingTriggerMode.TRIGGER_DISABLED
+      1 -> PolarOfflineRecordingTriggerMode.TRIGGER_SYSTEM_START
+      2 -> PolarOfflineRecordingTriggerMode.TRIGGER_EXERCISE_START
+      else -> PolarOfflineRecordingTriggerMode.TRIGGER_DISABLED
+    }
+
+    val featureList = features.let {
+      List(it.size()) { index -> it.getString(index).orEmpty() }
+    }
+
+    // Check for Offline Recording features configured featureList and
+    // add the config for OfflineRecordingTrigger when present in featureList
+    val triggerFeatures = mutableMapOf<PolarBleApi.PolarDeviceDataType, PolarSensorSetting?>()
+    for (feature in featureList) {
+      when(feature) {
+        "OfflineHR" -> {
+          Log.d(TAG, "Configuring OfflineHR settings")
+          triggerFeatures[PolarBleApi.PolarDeviceDataType.HR] = null  // Default Heart Rate settings on Polar Sense
+        }
+        "OfflineACC" -> {
+          Log.d(TAG, "Configuring OfflineACC settings")
+          triggerFeatures[PolarBleApi.PolarDeviceDataType.ACC] = PolarSensorSetting(  // Default Accelerometer settings on Polar Sense
+            mapOf(
+              PolarSensorSetting.SettingType.SAMPLE_RATE to 52,
+              PolarSensorSetting.SettingType.RESOLUTION to 16,
+              PolarSensorSetting.SettingType.RANGE to 8,
+              PolarSensorSetting.SettingType.CHANNELS to 3
+            )
+          )
+        }
+        "OfflineGYR" -> {
+          Log.d(TAG, "Configuring OfflineGYR settings")
+          triggerFeatures[PolarBleApi.PolarDeviceDataType.GYRO] = PolarSensorSetting(  // Default Gyro settings on Polar Sense
+            mapOf(
+              PolarSensorSetting.SettingType.SAMPLE_RATE to 52,
+              PolarSensorSetting.SettingType.RESOLUTION to 16,
+              PolarSensorSetting.SettingType.RANGE to 2000,
+              PolarSensorSetting.SettingType.CHANNELS to 3
+            )
+          )
+        }
+        "OfflinePPG" -> {
+          Log.d(TAG, "Configuring OfflinePPG settings")
+          triggerFeatures[PolarBleApi.PolarDeviceDataType.PPG] = PolarSensorSetting(  // Default PPG settings on Polar Sense
+            mapOf(
+              PolarSensorSetting.SettingType.SAMPLE_RATE to 55,
+              PolarSensorSetting.SettingType.RESOLUTION to 22,
+              PolarSensorSetting.SettingType.CHANNELS to 4
+            )
+          )
+        }
+        "OfflineMAG" -> {
+          Log.d(TAG, "Configuring OfflineMAG settings")
+          triggerFeatures[PolarBleApi.PolarDeviceDataType.MAGNETOMETER] = PolarSensorSetting(  // Default MAGNETOMETER settings on Polar Sense
+            mapOf(
+              PolarSensorSetting.SettingType.SAMPLE_RATE to 10,
+              PolarSensorSetting.SettingType.RESOLUTION to 16,
+              PolarSensorSetting.SettingType.RANGE to 50,
+              PolarSensorSetting.SettingType.CHANNELS to 3
+            )
+          )
+        }
+        "OfflinePPI" -> {
+          Log.d(TAG, "Configuring OfflinePPI settings")
+          triggerFeatures[PolarBleApi.PolarDeviceDataType.PPI] = null
+        }
+        else -> {
+          Log.d(TAG, "No matching offline features found in featureList: $featureList")
+        }
+      }
+    }
+
+    try {
+      val triggerSettings = PolarOfflineRecordingTrigger(
+        triggerMode = recordingTrigger,
+        triggerFeatures = triggerFeatures,
+      )
+
+      // Secret Key is optional, can be implemented if needed, currently set to null
+      api.setOfflineRecordingTrigger(deviceId, triggerSettings, null)
+        .observeOn(AndroidSchedulers.mainThread())
+        .subscribe(
+          {
+            Log.d(TAG, "Offline Recording Trigger set successfully for device: $deviceId")
+          },
+          { error ->
+            Log.e(TAG, "Failed to set trigger: ${error.localizedMessage}", error)
+          }
+        )
+
+      // Check if changes has been applied
+      api.getOfflineRecordingTriggerSetup(deviceId)
+        .observeOn(AndroidSchedulers.mainThread())
+        .subscribe(
+          { trigger: PolarOfflineRecordingTrigger ->
+            // Success callback
+            Log.d(TAG, "Offline recording trigger fetched successfully")
+            Log.d(TAG, "Trigger ID: ${trigger.triggerMode}")
+            Log.d(TAG, "Trigger Features: ${trigger.triggerFeatures}")
+          },
+          { error: Throwable ->
+            // Error callback
+            Log.e("PolarTrigger", "Error fetching trigger: ${error.localizedMessage}", error)
+          }
+        )
+    } catch(polarInvalidArgument: PolarInvalidArgument){
+      Log.e(TAG, "Failed to set Offline Recording Trigger on device. Reason $polarInvalidArgument ")
+    }
+  }
+
+  override fun fetchOfflineRecordings(deviceId: String){
+    try {
+      api.listOfflineRecordings(deviceId)
+        .observeOn(AndroidSchedulers.mainThread())
+        .subscribe(
+          { polarOfflineRecordingEntry: PolarOfflineRecordingEntry ->
+            Log.d(
+              TAG,
+              "next: ${polarOfflineRecordingEntry.date} path: ${polarOfflineRecordingEntry.path}, size: ${polarOfflineRecordingEntry.size}"
+            )
+          },
+          { error: Throwable -> Log.e(TAG, "Failed to list recordings: $error") },
+          { Log.d(TAG, "list recordings complete") }
+        )
+    } catch(polarInvalidArgument: PolarInvalidArgument){
+      Log.e(TAG, "Failed to fetch offline recordings. Reason $polarInvalidArgument ")
+    }
+  }
+
+  override fun deleteAllOfflineRecordings(deviceId: String){
+    val entryCache: MutableMap<String, MutableList<PolarOfflineRecordingEntry>> = mutableMapOf()
+    var deleteEntryCount = AtomicInteger(0)
+    try {
+      api.listOfflineRecordings(deviceId)
+        .observeOn(AndroidSchedulers.mainThread())
+        .doOnSubscribe {
+          entryCache[deviceId] = mutableListOf()
+        }
+        .map {
+          entryCache[deviceId]?.add(it)
+          it
+        }
+        .subscribe(
+          { polarOfflineRecordingEntry: PolarOfflineRecordingEntry ->
+            // Fetch record file
+            Log.d(
+              TAG,
+              "next: ${polarOfflineRecordingEntry.date} path: ${polarOfflineRecordingEntry.path}, size: ${polarOfflineRecordingEntry.size}"
+            )
+
+            // Delete record file
+            try {
+              api.removeOfflineRecord(deviceId, polarOfflineRecordingEntry)
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(
+                  {
+                    Log.d(TAG, "Recording file ${deleteEntryCount.incrementAndGet()} out of ${entryCache[deviceId]?.size} deleted")
+                  },
+                  { error ->
+                    val errorString = "Recording file deletion failed: $error"
+                    Log.e(TAG, errorString)
+                  }
+                )
+
+            } catch (e: Exception) {
+              Log.e(TAG, "Delete offline recording failed on entry ...", e)
+            }
+          },
+          { error: Throwable -> Log.e(TAG, "Failed to list recordings: $error") },
+          { Log.d(TAG, "delete all recordings complete") }
+        )
+    } catch(polarInvalidArgument: PolarInvalidArgument){
+      Log.e(TAG, "Failed to delete all offline recordings. Reason $polarInvalidArgument ")
+    }
+  }
+
   // Sets the date time on the Polar device
   override fun setDeviceTime(deviceId: String) {
     val calendar = Calendar.getInstance()
@@ -155,6 +345,24 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
           sendEvent("PolarGetTimeData", event)
         },
         { error: Throwable -> Log.e(TAG, "get time failed: $error") }
+      )
+  }
+
+  override fun getDiskSpace(deviceId: String) {
+    Log.e(TAG, "Get Disk Space")
+    api.getDiskSpace(deviceId)
+      .observeOn(AndroidSchedulers.mainThread())
+      .subscribe(
+        { diskSpace ->
+          Log.d(TAG, "Disk space left: ${diskSpace.freeSpace}/${diskSpace.totalSpace} Bytes")
+          // Long not supported, use double as workaround
+          // See: https://github.com/facebook/react-native/issues/9685
+          val event: WritableMap = Arguments.createMap()
+          event.putDouble("freeSpace", diskSpace.freeSpace.toDouble())
+          event.putDouble("totalSpace", diskSpace.totalSpace.toDouble())
+          sendEvent("PolarDiskSpace", event)
+        },
+        { error: Throwable -> Log.e(TAG, "Get disk space failed: $error") }
       )
   }
 

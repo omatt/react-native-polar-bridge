@@ -48,6 +48,22 @@ export function getDeviceTime(deviceId: string) {
   return PolarBridge.getDeviceTime(deviceId);
 }
 
+export function getDiskSpace(deviceId: string) {
+  return PolarBridge.getDiskSpace(deviceId);
+}
+
+export function setPolarRecordingTrigger(deviceId: string, recordingMode: number, features: string[]) {
+  return PolarBridge.setPolarRecordingTrigger(deviceId, recordingMode, features);
+}
+
+export function fetchOfflineRecordings(deviceId: string) {
+  return PolarBridge.fetchOfflineRecordings(deviceId);
+}
+
+export function deleteAllOfflineRecordings(deviceId: string) {
+  return PolarBridge.deleteAllOfflineRecordings(deviceId);
+}
+
 export function disposeHrStream() {
   return PolarBridge.disposeHrStream();
 }
@@ -81,4 +97,20 @@ export const emittedEventId = Object.freeze({
   POLAR_PPG_DATA: 'PolarPpgData',
   POLAR_PPG_ERROR: 'PolarPpgError',
   POLAR_PPG_COMPLETE: 'PolarPpgComplete',
+  POLAR_DISK_SPACE: 'PolarDiskSpace',
+});
+
+export const OfflineRecordingFeature = Object.freeze({
+  OFFLINE_HR : 'OfflineHR',
+  OFFLINE_ACC : 'OfflineACC',
+  OFFLINE_GYR : 'OfflineGYR',
+  OFFLINE_PPG : 'OfflinePPG',
+  OFFLINE_MAG : 'OfflineMAG',
+  OFFLINE_PPI : 'OfflinePPI',
+});
+
+export const OfflineRecordingTriggerMode = Object.freeze({
+  TRIGGER_DISABLED: 0,
+  TRIGGER_SYSTEM_START: 1,
+  TRIGGER_EXERCISE_START: 2,
 });

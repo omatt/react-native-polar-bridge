@@ -13,6 +13,10 @@ export interface Spec extends TurboModule {
   disableSdkMode(deviceId: string): void;
   getDeviceTime(deviceId: string): void;
   setDeviceTime(deviceId: string): void;
+  getDiskSpace(deviceId: string): void;
+  setPolarRecordingTrigger(deviceId: string, recordingMode: number, features: string[]): void;
+  fetchOfflineRecordings(deviceId: string): void;
+  deleteAllOfflineRecordings(deviceId: string): void;
   scanDevices(): void;
   disposeHrStream(): void;
   disposeAccStream(): void;

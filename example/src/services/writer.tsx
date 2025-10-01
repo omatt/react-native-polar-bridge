@@ -1,10 +1,9 @@
 import RNFS from 'react-native-fs';
-import { formatDateYYYYMMDDHHMMSS } from './utils';
 
 export async function logHeartRateToCSV(hr: number) {
   const csvFilePath = `${RNFS.DownloadDirectoryPath}/polar_heart_rate_log.csv`;
-  const timestamp = formatDateYYYYMMDDHHMMSS(new Date());
-  const csvHrLine = `${timestamp},${hr}\n`;
+  // const timestamp = formatDateYYYYMMDDHHMMSS(new Date());
+  const csvHrLine = `${Date.now()},${hr}\n`; // Log unixTimestamp
 
   try {
     const fileExists = await RNFS.exists(csvFilePath);
