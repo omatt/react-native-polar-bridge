@@ -1,6 +1,6 @@
 {
   "name": "react-native-polar-bridge",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Testing Polar SDK on React Native",
   "source": "./src/index.tsx",
   "main": "./lib/module/index.js",
@@ -42,8 +42,9 @@
   },
   "keywords": [
     "react-native",
-    "ios",
-    "android"
+    "android",
+    "polar",
+    "polar-ble-sdk"
   ],
   "repository": {
     "type": "git",

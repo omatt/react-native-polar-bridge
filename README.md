@@ -12,7 +12,7 @@ npm install react-native-polar-bridge
 
 This React Native library uses the [polar-ble-sdk](https://github.com/polarofficial/polar-ble-sdk).
 
-⚠️ The library only has support for Android devices.
+> ⚠️ The library only has support for Android devices.
 
 ### Connecting to Device
 
@@ -25,7 +25,7 @@ export default function App(){
 
   // ...
 
-  oDevice(deviceId);
+  connectToDevice(deviceId);
 }
 
 ```
@@ -70,7 +70,7 @@ useEffect(() => {
 }, []);
 ```
 
-### Heart Rate Stream
+### Heart Rate Data Stream
 
 Ensure that the `deviceId` of the Polar device is connected before calling the function.
 
@@ -83,6 +83,7 @@ Listen for emitted events of the HR data.
 ```js
 useEffect(() => {
   const hrListener = polarEmitter.addListener(emittedEventId.POLAR_HR_DATA, (data) => {
+    // Heart rate data does not have timestamp, log current timestamp
     console.log('Heart Rate:', `${data.hr} bpm ${formatDateYYYYMMDDHHMMSS(new Date())}`);
   });
 
@@ -102,7 +103,7 @@ useEffect(() => {
 }, []);
 ```
 
-### Accelerometer
+### Accelerometer Data Stream
 
 Ensure that the `deviceId` of the Polar device is connected before calling the function. The default sampling rate is 52Hz and can be changed with [SDK mode enabled](https://github.com/polarofficial/polar-ble-sdk/issues/163) on the device.
 
@@ -118,7 +119,7 @@ const accListener = polarEmitter.addListener(emittedEventId.POLAR_ACC_DATA, (dat
 });
 ```
 
-### Gyroscope
+### Gyroscope Data Stream
 
 Ensure that the `deviceId` of the Polar device is connected before calling the function. Like the Accelerometer, the default sampling rate is 52Hz and can be changed with SDK mode enabled on the device.
 
@@ -134,7 +135,7 @@ const gyrListener = polarEmitter.addListener(emittedEventId.POLAR_GYR_DATA, (dat
 });
 ```
 
-### Photoplethysmogram (PPG)
+### Photoplethysmogram (PPG) Data Stream
 
 Ensure that the `deviceId` of the Polar device is connected before calling the function. The default sampling rate is 55Hz and can be changed with SDK mode enabled on the device.
 
@@ -149,6 +150,14 @@ const ppgListener = polarEmitter.addListener(emittedEventId.POLAR_PPG_DATA, (dat
   console.log('PPG Stream:', `ppg0: ${data.ppg0} ppg1: ${data.ppg1} ppg2: ${data.ppg2} ambient: ${data.ambient} timestamp: ${formatPolarTimestamp(data.ppgTimestamp)}`);
 });
 ```
+
+> ⚠️ IMPORTANT: Remove listener from the EventEmitter on disconnect. Otherwise, the event broadcast will be sent multiple times
+> ```js
+> hrListener.remove();
+> accListener.remove();
+> gyrListener.remove();
+> ppgListener.remove();
+> ```
 
 ### Offline Recording Trigger
 
@@ -178,6 +187,20 @@ setPolarRecordingTrigger(connectedDeviceId,
   offlineRecordingFeatureList);
 ```
 
+### Fetch Offline Recordings List
+
+Fetch a list of Offline Recordings from the Polar device
+
+```js
+fetchOfflineRecordings(connectedDeviceId)
+  .then((offlineRecordings: OfflineRecording[]) =>{
+  offlineRecordings.forEach((offlineRecordingEntry: OfflineRecording) =>{
+    console.log('Polar Offline Recording',
+      `Recording Start: ${offlineRecordingEntry.recTimestamp} Path: ${offlineRecordingEntry.path} Size: ${offlineRecordingEntry.size}`);
+  });
+});
+```
+
 ### SDK Mode
 
 Enabling SDK mode on supported Polar devices gives more sampling rate and range options. See [Polar documentation](https://github.com/polarofficial/polar-ble-sdk/blob/master/documentation/products/PolarVeritySense.md#sdk-mode-capabilities-in-polar-verity-sense) for more details.
@@ -198,14 +221,9 @@ setDeviceTime(connectedDeviceId);
 Fetch the time on the Polar device. `data.timeMs` is in unixTime in milliseconds.
 
 ```js
-getDeviceTime(connectedDeviceId);
-
-polarEmitter.addListener(
-  emittedEventId.POLAR_DEVICE_TIME,
-  (data) => {
-    console.log('Polar Device Time', `${data.time} ms: ${data.timeMs}`);
-  }
-);
+getDeviceTime(connectedDeviceId).then((deviceTime: DeviceTime) =>{
+  console.log('Polar Device Time',`${deviceTime.time} ms: ${deviceTime.timeMs}`);
+});
 ```
 
 ### Disk Space
@@ -213,14 +231,9 @@ polarEmitter.addListener(
 Supported Polar devices can store offline recordings on its storage and remaining storage space can be tracked using this API.
 
 ```js
-getDiskSpace(connectedDeviceId);
-
-polarEmitter.addListener(
-  emittedEventId.POLAR_DISK_SPACE,
-  (data) => {
-    console.log('Polar Disk Space', `Disk space: ${data.freeSpace} / ${data.totalSpace} Bytes`);
-  }
-);
+getDiskSpace(connectedDeviceId).then((diskSpace: DiskSpace) =>{
+  console.log('Polar Disk Space', `Disk space: ${diskSpace.freeSpace} / ${diskSpace.totalSpace} Bytes`);
+});
 ```
 
 ## Contributing
