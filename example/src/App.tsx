@@ -32,7 +32,7 @@ import {
   getDiskSpace,
   OfflineRecordingFeature,
   fetchOfflineRecordings,
-  deleteAllOfflineRecordings,
+  deleteAllOfflineRecordings, downloadOfflineRecordings,
 } from 'react-native-polar-bridge';
 import { useEffect, useState } from 'react';
 
@@ -46,19 +46,19 @@ import {
   logHeartRateToCSV,
   logPpgToCSV,
 } from './services/writer';
+import type {
+  AccData,
+  DeviceTime,
+  DiskSpace,
+  GyrData,
+  HrData, OfflineRecording,
+  PpgData, ScannedDevice,
+} from '../../src/PolarDataModel';
 
 // const result = multiply(3, 7);
 
 const nativeModule = NativeModules.YourNativeModuleName;
 const polarEmitter = new NativeEventEmitter(nativeModule);
-
-type Device = {
-  deviceId: string;
-  name?: string;
-  address?: string;
-  rssi?: string;
-  isConnectable?: string;
-};
 
 const displayDialogNoConnectedDevice = () => {
   console.log('Empty Device ID or no connected Device');
@@ -87,7 +87,7 @@ export default function App() {
   const [isSdkModeToggled, setIsSdkModeToggled] = useState(false);
   const toggleSdkModeStatus = () => setIsSdkModeToggled((prev) => !prev);
 
-  const [devices, setDevices] = useState<Device[]>([]);
+  const [devices, setDevices] = useState<ScannedDevice[]>([]);
   const [connectedDeviceId, setConnectedDeviceId] = useState<string | null>(
     null
   );
@@ -109,7 +109,7 @@ export default function App() {
   useEffect(() => {
     const onDeviceFound = polarEmitter.addListener(
       emittedEventId.SCAN_DEVICE_FOUND,
-      (device) => {
+      (device: ScannedDevice) => {
         console.log('Device found:', device);
         // Store device in list, update state, etc.
         setDevices((prevDevices) => {
@@ -148,7 +148,7 @@ export default function App() {
   useEffect(() => {
     const hrListener = polarEmitter.addListener(
       emittedEventId.POLAR_HR_DATA,
-      (data) => {
+      (data: HrData) => {
         // console.log('Received HR data:', data);
         console.log(
           'Heart Rate:',
@@ -190,7 +190,7 @@ export default function App() {
 
     const accListener = polarEmitter.addListener(
       emittedEventId.POLAR_ACC_DATA,
-      (data) => {
+      (data: AccData) => {
         console.log(
           'ACC Stream:',
           `x: ${data.accX} y: ${data.accY} z: ${data.accZ} timestamp: ${formatPolarTimestamp(data.accTimestamp)}`
@@ -231,13 +231,13 @@ export default function App() {
 
     const gyrListener = polarEmitter.addListener(
       emittedEventId.POLAR_GYR_DATA,
-      (data) => {
+      (data: GyrData) => {
         console.log(
           'GYR Stream:',
           `x: ${data.gyrX} y: ${data.gyrY} z: ${data.gyrZ} timestamp: ${formatPolarTimestamp(data.gyrTimestamp)}`
         );
         if(isLogCSVEnabled){
-          logGyroToCSV(data.gyrX, data.gyrY, data.gyrZ, `${formatPolarTimestampToUnixTimeStamp(data.gyrTimestamp)}`).then();
+          logGyroToCSV(Number(data.gyrX), Number(data.gyrY), Number(data.gyrZ), `${formatPolarTimestampToUnixTimeStamp(data.gyrTimestamp)}`).then();
         }
       }
     );
@@ -272,13 +272,13 @@ export default function App() {
 
     const ppgListener = polarEmitter.addListener(
       emittedEventId.POLAR_PPG_DATA,
-      (data) => {
+      (data: PpgData) => {
         console.log(
           'PPG Stream:',
           `ppg0: ${data.ppg0} ppg1: ${data.ppg1} ppg2: ${data.ppg2} ambient: ${data.ambient} timestamp: ${formatPolarTimestamp(data.ppgTimestamp)}`
         );
         if(isLogCSVEnabled) {
-          logPpgToCSV(data.ppg0, data.ppg1, data.ppg2, data.ambient, `${formatPolarTimestampToUnixTimeStamp(data.ppgTimestamp)}`).then();
+          logPpgToCSV(Number(data.ppg0), Number(data.ppg1), Number(data.ppg2), Number(data.ambient), `${formatPolarTimestampToUnixTimeStamp(data.ppgTimestamp)}`).then();
         }
       }
     );
@@ -311,23 +311,6 @@ export default function App() {
       }
     );
 
-    const deviceTimeListener = polarEmitter.addListener(
-      emittedEventId.POLAR_DEVICE_TIME,
-      (data) => {
-        console.log(
-          'Polar Device Time',
-          `${data.time} ms: ${data.timeMs} converted timeInMs: ${formatDateYYYYMMDDHHMMSS(data.timeMs)}`
-        );
-      }
-    );
-
-    const deviceDiskSpace = polarEmitter.addListener(
-      emittedEventId.POLAR_DISK_SPACE,
-      (data) => {
-        console.log('Polar Disk Space', `Disk space: ${data.freeSpace} / ${data.totalSpace} Bytes`);
-      }
-    );
-
     return () => {
       hrListener.remove();
       errorHrListener.remove();
@@ -341,8 +324,6 @@ export default function App() {
       ppgListener.remove();
       errorPpgListener.remove();
       completePpgListener.remove();
-      deviceTimeListener.remove();
-      deviceDiskSpace.remove();
     };
   }, [isLogCSVEnabled]);
 
@@ -414,6 +395,28 @@ export default function App() {
     if (isGyrStreamToggled) handleFetchGyrData(); // Stop GYR stream if running
     if (isPpgStreamToggled) handleFetchPpgData(); // Stop PPG stream if running
   };
+
+  const getOfflineRecordingList = (connectedDeviceId: string) =>{
+    fetchOfflineRecordings(connectedDeviceId).then((offlineRecordings: OfflineRecording[]) =>{
+      offlineRecordings.forEach((offlineRecordingEntry: OfflineRecording) =>{
+        console.log('Polar Offline Recording', `Recording Start: ${offlineRecordingEntry.recTimestamp} Path: ${offlineRecordingEntry.path} Size: ${offlineRecordingEntry.size}`);
+      });
+    });
+  }
+
+  const getPolarDeviceTime = (connectedDeviceId: string)=>{
+    getDeviceTime(connectedDeviceId).then((deviceTime: DeviceTime) =>{
+      console.log('Polar Device Time',
+        `${deviceTime.time} ms: ${deviceTime.timeMs} converted timeInMs: ${formatDateYYYYMMDDHHMMSS(deviceTime.timeMs)}`
+      );
+    });
+  }
+
+  const getPolarDiskSpace = (connectedDeviceId: string)=>{
+    getDiskSpace(connectedDeviceId).then((diskSpace: DiskSpace) =>{
+      console.log('Polar Disk Space', `Disk space: ${diskSpace.freeSpace} / ${diskSpace.totalSpace} Bytes`);
+    });
+  }
 
   return (
     <ScrollView style={styles.scrollContainer}>
@@ -573,7 +576,7 @@ export default function App() {
             title='Get Device Time'
             onPress={() => {
               if (connectedDeviceId != null) {
-                getDeviceTime(connectedDeviceId);
+                getPolarDeviceTime(connectedDeviceId);
               } else {
                 displayDialogNoConnectedDevice();
               }
@@ -585,7 +588,7 @@ export default function App() {
             title='Get Disk Space'
             onPress={() => {
               if (connectedDeviceId != null) {
-                getDiskSpace(connectedDeviceId);
+                getPolarDiskSpace(connectedDeviceId);
               } else {
                 displayDialogNoConnectedDevice();
               }
@@ -597,7 +600,7 @@ export default function App() {
             title='Get Offline Recordings'
             onPress={() => {
               if (connectedDeviceId != null) {
-                fetchOfflineRecordings(connectedDeviceId);
+                getOfflineRecordingList(connectedDeviceId);
               } else {
                 displayDialogNoConnectedDevice();
               }
@@ -610,6 +613,18 @@ export default function App() {
             onPress={() => {
               if (connectedDeviceId != null) {
                 deleteAllOfflineRecordings(connectedDeviceId);
+              } else {
+                displayDialogNoConnectedDevice();
+              }
+            }}
+          />
+        </View>
+        <View style={styles.buttonContainer}>
+          <Button
+            title='Download Offline Recordings'
+            onPress={() => {
+              if (connectedDeviceId != null) {
+                downloadOfflineRecordings(connectedDeviceId);
               } else {
                 displayDialogNoConnectedDevice();
               }

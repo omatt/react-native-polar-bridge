@@ -60,6 +60,10 @@ export function fetchOfflineRecordings(deviceId: string) {
   return PolarBridge.fetchOfflineRecordings(deviceId);
 }
 
+export function downloadOfflineRecordings(deviceId: string) {
+  return PolarBridge.downloadOfflineRecordings(deviceId);
+}
+
 export function deleteAllOfflineRecordings(deviceId: string) {
   return PolarBridge.deleteAllOfflineRecordings(deviceId);
 }
