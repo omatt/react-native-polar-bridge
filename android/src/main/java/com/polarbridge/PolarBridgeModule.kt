@@ -17,6 +17,7 @@ import io.reactivex.rxjava3.core.Flowable
 import io.reactivex.rxjava3.core.Single
 import java.util.*
 import java.util.concurrent.atomic.AtomicInteger
+import java.time.Instant
 
 @ReactModule(name = PolarBridgeModule.NAME)
 class PolarBridgeModule(reactContext: ReactApplicationContext) :
@@ -120,16 +121,18 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  val recordingKey = PolarRecordingSecret(
+    byteArrayOf(
+      0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
+      0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07
+    )
+  )
+
   override fun setPolarRecordingTrigger(deviceId: String, recordingMode: Double, features: ReadableArray) {
     Log.e(TAG, "Set Offline Recording Trigger on device: $deviceId, Recording Mode: $recordingMode")
 
     // Placeholder recording secret key for Offline Recording
-    val yourSecret = PolarRecordingSecret(
-      byteArrayOf(
-        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
-        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07
-      )
-    )
+    // Use to encrypt/decrypt offline recordings
 
     // Check for configured trigger mode
     val recordingTrigger = when (recordingMode.toInt()) {
@@ -212,7 +215,7 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
       )
 
       // Secret Key is optional, can be implemented if needed, currently set to null
-      api.setOfflineRecordingTrigger(deviceId, triggerSettings, null)
+      api.setOfflineRecordingTrigger(deviceId, triggerSettings, recordingKey)
         .observeOn(AndroidSchedulers.mainThread())
         .subscribe(
           {
@@ -243,16 +246,89 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  override fun fetchOfflineRecordings(deviceId: String){
+  override fun fetchOfflineRecordings(deviceId: String, promise: Promise){
+    try {
+      val array: WritableArray = Arguments.createArray()
+      api.listOfflineRecordings(deviceId)
+        .observeOn(AndroidSchedulers.mainThread())
+        .subscribe(
+          { polarOfflineRecordingEntry: PolarOfflineRecordingEntry ->
+            Log.d(TAG, "next: ${polarOfflineRecordingEntry.date} path: ${polarOfflineRecordingEntry.path}, size: ${polarOfflineRecordingEntry.size}")
+
+            val map: WritableMap = Arguments.createMap()
+            map.putDouble("recTimestamp", polarOfflineRecordingEntry.date.time.toDouble())
+            map.putString("path", polarOfflineRecordingEntry.path)
+            map.putDouble("size", polarOfflineRecordingEntry.size.toDouble())
+            array.pushMap(map)
+          },
+          { error: Throwable ->
+            Log.e(TAG, "Failed to list recordings: $error")
+            promise.reject("FETCH_RECORDING_ERROR", "Failed to fetch offline recordings", error)
+          },
+          {
+            Log.d(TAG, "List recordings complete")
+            promise.resolve(array)
+          }
+        )
+    } catch(polarInvalidArgument: PolarInvalidArgument){
+      Log.e(TAG, "Failed to fetch offline recordings. Reason $polarInvalidArgument ")
+      promise.reject("INVALID_ARGUMENT", "Invalid device ID", polarInvalidArgument)
+    }
+  }
+
+  override fun downloadOfflineRecordings(deviceId: String){
     try {
       api.listOfflineRecordings(deviceId)
         .observeOn(AndroidSchedulers.mainThread())
         .subscribe(
           { polarOfflineRecordingEntry: PolarOfflineRecordingEntry ->
-            Log.d(
-              TAG,
-              "next: ${polarOfflineRecordingEntry.date} path: ${polarOfflineRecordingEntry.path}, size: ${polarOfflineRecordingEntry.size}"
-            )
+            Log.d(TAG, "next: ${polarOfflineRecordingEntry.date} path: ${polarOfflineRecordingEntry.path}, size: ${polarOfflineRecordingEntry.size}")
+
+            api.getOfflineRecord(deviceId, polarOfflineRecordingEntry, recordingKey)
+              // If no secret key was used:
+              // api.getOfflineRecord(deviceId, offlineEntry)
+              .subscribe(
+                {
+                  Log.d(TAG, "Recording ${polarOfflineRecordingEntry.path} downloaded. Size: ${polarOfflineRecordingEntry.size}")
+                  when (it) {
+                    is PolarOfflineRecordingData.HrOfflineRecording -> {
+                      Log.d(TAG, "HR Offline Recording started at ${it.startTime.time}")
+                      var index = 0;
+                      val intervalInMs = 1000; // 1Hz
+                      val firstSampleDateUTC = it.startTime.timeInMillis + intervalInMs
+                      for (sample in it.data.samples) {
+                        val unixTimestamp = firstSampleDateUTC + intervalInMs * index++;
+                        val timestamp = Instant.ofEpochMilli(unixTimestamp)
+                        Log.d(TAG, "HR data: ${timestamp} hr: ${sample.hr} correctedHr: ${sample.correctedHr} ppgQuality: ${sample.ppgQuality} entry $index of ${it.data.samples.size}")
+                      }
+                    }
+                    is PolarOfflineRecordingData.AccOfflineRecording -> {
+                      Log.d(TAG, "ACC Offline Recording started at ${it.startTime.time}")
+                      var index = 0;
+                      for (sample in it.data.samples) {
+                        Log.d(TAG, "ACC data: time: ${sample.timeStamp} X: ${sample.x} Y: ${sample.y} Z: ${sample.z} entry ${++index} of ${it.data.samples.size}")
+                      }
+                    }
+                    is PolarOfflineRecordingData.GyroOfflineRecording -> {
+                      Log.d(TAG, "GYRO Offline Recording started at ${it.startTime.time}")
+                      var index = 0;
+                      for (sample in it.data.samples) {
+                        Log.d(TAG, "GYRO data: ${sample.timeStamp} X: ${sample.x} Y: ${sample.y} Z: ${sample.z} entry ${++index} of ${it.data.samples.size}")
+                      }
+                    }
+                    is PolarOfflineRecordingData.PpgOfflineRecording -> {
+                      Log.d(TAG, "PPG Offline Recording started at ${it.startTime.time}")
+                      var index = 0;
+                      for (sample in it.data.samples) {
+                        Log.d(TAG, "PPG data: ${sample.timeStamp} ppg0 ${sample.channelSamples[0]} ppg1 ${sample.channelSamples[1]} ppg2 ${sample.channelSamples[2]} ambient ${sample.channelSamples[3]} entry ${++index} of ${it.data.samples.size}")
+                      }
+                    }
+                    else -> {
+                      Log.d(TAG, "Recording type is not yet implemented")
+                    }
+                  }
+                }
+              )
           },
           { error: Throwable -> Log.e(TAG, "Failed to list recordings: $error") },
           { Log.d(TAG, "list recordings complete") }
@@ -329,7 +405,7 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  override fun getDeviceTime(deviceId: String) {
+  override fun getDeviceTime(deviceId: String, promise: Promise) {
     Log.e(TAG, "Get Devices Time")
     api.getLocalTime(deviceId)
       .observeOn(AndroidSchedulers.mainThread())
@@ -337,18 +413,21 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
         { calendar ->
           val timeGetString = "${calendar.time} read from the device"
 
-          val event: WritableMap = Arguments.createMap()
-          event.putString("time", "${calendar.time}")
+          val map: WritableMap = Arguments.createMap()
+          map.putString("time", "${calendar.time}")
           // Long not supported, use double as workaround
           // See: https://github.com/facebook/react-native/issues/9685
-          event.putDouble("timeMs", calendar.timeInMillis.toDouble())
-          sendEvent("PolarGetTimeData", event)
+          map.putDouble("timeMs", calendar.timeInMillis.toDouble())
+          promise.resolve(map)
         },
-        { error: Throwable -> Log.e(TAG, "get time failed: $error") }
+        { error: Throwable ->
+          Log.e(TAG, "get time failed: $error")
+          promise.reject("GET_DEVICE_TIME_ERROR", "Failed to get device time", error)
+        }
       )
   }
 
-  override fun getDiskSpace(deviceId: String) {
+  override fun getDiskSpace(deviceId: String, promise: Promise) {
     Log.e(TAG, "Get Disk Space")
     api.getDiskSpace(deviceId)
       .observeOn(AndroidSchedulers.mainThread())
@@ -357,12 +436,15 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
           Log.d(TAG, "Disk space left: ${diskSpace.freeSpace}/${diskSpace.totalSpace} Bytes")
           // Long not supported, use double as workaround
           // See: https://github.com/facebook/react-native/issues/9685
-          val event: WritableMap = Arguments.createMap()
-          event.putDouble("freeSpace", diskSpace.freeSpace.toDouble())
-          event.putDouble("totalSpace", diskSpace.totalSpace.toDouble())
-          sendEvent("PolarDiskSpace", event)
+          val map: WritableMap = Arguments.createMap()
+          map.putDouble("freeSpace", diskSpace.freeSpace.toDouble())
+          map.putDouble("totalSpace", diskSpace.totalSpace.toDouble())
+          promise.resolve(map)
         },
-        { error: Throwable -> Log.e(TAG, "Get disk space failed: $error") }
+        { error: Throwable ->
+          Log.e(TAG, "Get disk space failed: $error")
+          promise.reject("GET_DISK_SPACE_ERROR", "Failed to get device disk space", error)
+        }
       )
   }
 
@@ -688,3 +770,8 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
     private const val PERMISSION_REQUEST_CODE = 1
   }
 }
+
+enum class OfflineRecording {
+  HR, ACC, GYRO, PPG
+}
+
