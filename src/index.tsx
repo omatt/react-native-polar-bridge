@@ -52,6 +52,14 @@ export function getDiskSpace(deviceId: string) {
   return PolarBridge.getDiskSpace(deviceId);
 }
 
+export function startOfflineRecording(deviceId: string, features: string[]) {
+  return PolarBridge.startOfflineRecording(deviceId, features);
+}
+
+export function stopOfflineRecording(deviceId: string, features: string[]) {
+  return PolarBridge.stopOfflineRecording(deviceId, features);
+}
+
 export function setPolarRecordingTrigger(deviceId: string, recordingMode: number, features: string[]) {
   return PolarBridge.setPolarRecordingTrigger(deviceId, recordingMode, features);
 }

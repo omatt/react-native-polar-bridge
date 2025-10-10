@@ -61,11 +61,16 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
     )
   }
 
-  override fun connectToDevice(deviceId: String) {
-    api.setApiCallback(object : PolarBleApiCallback(){
-
+  override fun connectToDevice(deviceId: String, promise: Promise) {
+    val map: WritableMap = Arguments.createMap()
+    var deviceConnected = false
+    var batteryReceived = false
+    api.setApiCallback(object : PolarBleApiCallback() {
       override fun deviceConnected(polarDeviceInfo: PolarDeviceInfo) {
         Log.d("Polar", "Connected: ${polarDeviceInfo.deviceId}")
+        map.putString("connectedDeviceId", polarDeviceInfo.deviceId)
+        deviceConnected = true
+        runResolve()
       }
 
       override fun disInformationReceived(identifier: String, disInfo: DisInfo) {
@@ -81,13 +86,23 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
 
       override fun batteryLevelReceived(identifier: String, level: Int) {
         Log.d("Polar", "Battery for $identifier: $level%")
+        map.putInt("batteryLevel", level)
+        batteryReceived = true
+        runResolve()
+      }
+
+      private fun runResolve() {
+        if (deviceConnected && batteryReceived) {
+          promise.resolve(map)
+        }
       }
     })
     Log.e(TAG, "Connect device: $deviceId ")
     try {
       api.connectToDevice(deviceId)
-    } catch(polarInvalidArgument: PolarInvalidArgument){
+    } catch (polarInvalidArgument: PolarInvalidArgument) {
       Log.e(TAG, "Failed to connect to device. Reason $polarInvalidArgument ")
+      promise.reject("INVALID_ARGUMENT", "Invalid device ID", polarInvalidArgument)
     }
   }
 
@@ -95,7 +110,7 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
     Log.e(TAG, "Disconnect device: $deviceId ")
     try {
       api.disconnectFromDevice(deviceId)
-    } catch(polarInvalidArgument: PolarInvalidArgument){
+    } catch (polarInvalidArgument: PolarInvalidArgument) {
       Log.e(TAG, "Failed to disconnect from device. Reason $polarInvalidArgument ")
     }
   }
@@ -107,7 +122,7 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
       // but client is not informed. This is workaround for the bug.
       disposeAllStreams()
       api.enableSDKMode(deviceId)
-    } catch(polarInvalidArgument: PolarInvalidArgument){
+    } catch (polarInvalidArgument: PolarInvalidArgument) {
       Log.e(TAG, "Failed to enable SDK mode on device. Reason $polarInvalidArgument ")
     }
   }
@@ -116,7 +131,7 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
     Log.e(TAG, "Disable SDK Mode device: $deviceId ")
     try {
       api.disableSDKMode(deviceId)
-    } catch(polarInvalidArgument: PolarInvalidArgument){
+    } catch (polarInvalidArgument: PolarInvalidArgument) {
       Log.e(TAG, "Failed to disable SDK mode on device. Reason $polarInvalidArgument ")
     }
   }
@@ -142,76 +157,10 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
       else -> PolarOfflineRecordingTriggerMode.TRIGGER_DISABLED
     }
 
-    val featureList = features.let {
-      List(it.size()) { index -> it.getString(index).orEmpty() }
-    }
-
-    // Check for Offline Recording features configured featureList and
-    // add the config for OfflineRecordingTrigger when present in featureList
-    val triggerFeatures = mutableMapOf<PolarBleApi.PolarDeviceDataType, PolarSensorSetting?>()
-    for (feature in featureList) {
-      when(feature) {
-        "OfflineHR" -> {
-          Log.d(TAG, "Configuring OfflineHR settings")
-          triggerFeatures[PolarBleApi.PolarDeviceDataType.HR] = null  // Default Heart Rate settings on Polar Sense
-        }
-        "OfflineACC" -> {
-          Log.d(TAG, "Configuring OfflineACC settings")
-          triggerFeatures[PolarBleApi.PolarDeviceDataType.ACC] = PolarSensorSetting(  // Default Accelerometer settings on Polar Sense
-            mapOf(
-              PolarSensorSetting.SettingType.SAMPLE_RATE to 52,
-              PolarSensorSetting.SettingType.RESOLUTION to 16,
-              PolarSensorSetting.SettingType.RANGE to 8,
-              PolarSensorSetting.SettingType.CHANNELS to 3
-            )
-          )
-        }
-        "OfflineGYR" -> {
-          Log.d(TAG, "Configuring OfflineGYR settings")
-          triggerFeatures[PolarBleApi.PolarDeviceDataType.GYRO] = PolarSensorSetting(  // Default Gyro settings on Polar Sense
-            mapOf(
-              PolarSensorSetting.SettingType.SAMPLE_RATE to 52,
-              PolarSensorSetting.SettingType.RESOLUTION to 16,
-              PolarSensorSetting.SettingType.RANGE to 2000,
-              PolarSensorSetting.SettingType.CHANNELS to 3
-            )
-          )
-        }
-        "OfflinePPG" -> {
-          Log.d(TAG, "Configuring OfflinePPG settings")
-          triggerFeatures[PolarBleApi.PolarDeviceDataType.PPG] = PolarSensorSetting(  // Default PPG settings on Polar Sense
-            mapOf(
-              PolarSensorSetting.SettingType.SAMPLE_RATE to 55,
-              PolarSensorSetting.SettingType.RESOLUTION to 22,
-              PolarSensorSetting.SettingType.CHANNELS to 4
-            )
-          )
-        }
-        "OfflineMAG" -> {
-          Log.d(TAG, "Configuring OfflineMAG settings")
-          triggerFeatures[PolarBleApi.PolarDeviceDataType.MAGNETOMETER] = PolarSensorSetting(  // Default MAGNETOMETER settings on Polar Sense
-            mapOf(
-              PolarSensorSetting.SettingType.SAMPLE_RATE to 10,
-              PolarSensorSetting.SettingType.RESOLUTION to 16,
-              PolarSensorSetting.SettingType.RANGE to 50,
-              PolarSensorSetting.SettingType.CHANNELS to 3
-            )
-          )
-        }
-        "OfflinePPI" -> {
-          Log.d(TAG, "Configuring OfflinePPI settings")
-          triggerFeatures[PolarBleApi.PolarDeviceDataType.PPI] = null
-        }
-        else -> {
-          Log.d(TAG, "No matching offline features found in featureList: $featureList")
-        }
-      }
-    }
-
     try {
       val triggerSettings = PolarOfflineRecordingTrigger(
         triggerMode = recordingTrigger,
-        triggerFeatures = triggerFeatures,
+        triggerFeatures = buildTriggerFeatures(features),
       )
 
       // Secret Key is optional, can be implemented if needed, currently set to null
@@ -241,19 +190,22 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
             Log.e("PolarTrigger", "Error fetching trigger: ${error.localizedMessage}", error)
           }
         )
-    } catch(polarInvalidArgument: PolarInvalidArgument){
+    } catch (polarInvalidArgument: PolarInvalidArgument) {
       Log.e(TAG, "Failed to set Offline Recording Trigger on device. Reason $polarInvalidArgument ")
     }
   }
 
-  override fun fetchOfflineRecordings(deviceId: String, promise: Promise){
+  override fun fetchOfflineRecordings(deviceId: String, promise: Promise) {
     try {
       val array: WritableArray = Arguments.createArray()
       api.listOfflineRecordings(deviceId)
         .observeOn(AndroidSchedulers.mainThread())
         .subscribe(
           { polarOfflineRecordingEntry: PolarOfflineRecordingEntry ->
-            Log.d(TAG, "next: ${polarOfflineRecordingEntry.date} path: ${polarOfflineRecordingEntry.path}, size: ${polarOfflineRecordingEntry.size}")
+            Log.d(
+              TAG,
+              "next: ${polarOfflineRecordingEntry.date} path: ${polarOfflineRecordingEntry.path}, size: ${polarOfflineRecordingEntry.size}"
+            )
 
             val map: WritableMap = Arguments.createMap()
             map.putDouble("recTimestamp", polarOfflineRecordingEntry.date.time.toDouble())
@@ -270,10 +222,137 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
             promise.resolve(array)
           }
         )
-    } catch(polarInvalidArgument: PolarInvalidArgument){
+    } catch (polarInvalidArgument: PolarInvalidArgument) {
       Log.e(TAG, "Failed to fetch offline recordings. Reason $polarInvalidArgument ")
       promise.reject("INVALID_ARGUMENT", "Invalid device ID", polarInvalidArgument)
     }
+  }
+
+  override fun startOfflineRecording(deviceId: String, features: ReadableArray, promise: Promise) {
+    // Convert ReadableArray to List<String>
+    val featureList = List(features.size()) { index -> features.getString(index).orEmpty() }
+    val polarSensorSettings = buildTriggerFeatures(features);
+    try {
+      for (feature in featureList) {
+        when (feature) {
+          "OfflineHR" -> {
+            Log.d(TAG, "Start OfflineHR Recording")
+            startPolarOfflineRecording(deviceId, PolarBleApi.PolarDeviceDataType.HR,
+              polarSensorSettings[PolarBleApi.PolarDeviceDataType.HR], promise)
+          }
+          "OfflineACC" -> {
+            Log.d(TAG, "Start OfflineACC Recording")
+            startPolarOfflineRecording(deviceId, PolarBleApi.PolarDeviceDataType.ACC,
+              polarSensorSettings[PolarBleApi.PolarDeviceDataType.ACC], promise)
+          }
+          "OfflineGYR" -> {
+            Log.d(TAG, "Start OfflineGYR Recording")
+            startPolarOfflineRecording(deviceId, PolarBleApi.PolarDeviceDataType.GYRO,
+              polarSensorSettings[PolarBleApi.PolarDeviceDataType.GYRO], promise)
+          }
+          "OfflinePPG" -> {
+            Log.d(TAG, "Start OfflinePPG Recording")
+            startPolarOfflineRecording(deviceId, PolarBleApi.PolarDeviceDataType.PPG,
+              polarSensorSettings[PolarBleApi.PolarDeviceDataType.PPG], promise)
+          }
+          "OfflineMAG" -> {
+            Log.d(TAG, "Start OfflineMAG Recording")
+            startPolarOfflineRecording(deviceId, PolarBleApi.PolarDeviceDataType.MAGNETOMETER,
+              polarSensorSettings[PolarBleApi.PolarDeviceDataType.MAGNETOMETER], promise)
+          }
+          "OfflinePPI" -> {
+            Log.d(TAG, "Start OfflinePPI Recording")
+            startPolarOfflineRecording(deviceId, PolarBleApi.PolarDeviceDataType.PPI,
+              polarSensorSettings[PolarBleApi.PolarDeviceDataType.PPI], promise)
+          }
+          else -> {
+            Log.d(TAG, "Unknown feature: $feature")
+          }
+        }
+      }
+    } catch (polarInvalidArgument: PolarInvalidArgument) {
+      Log.e(TAG, "Failed to start offline recording. Reason $polarInvalidArgument ")
+    }
+  }
+
+  override fun stopOfflineRecording(deviceId: String, features: ReadableArray, promise: Promise) {
+    // Convert ReadableArray to List<String>
+    val featureList = List(features.size()) { index -> features.getString(index).orEmpty() }
+    try {
+      for (feature in featureList) {
+        when (feature) {
+          "OfflineHR" -> {
+            Log.d(TAG, "STOP OfflineHR Recording")
+            stopPolarOfflineRecording(deviceId, PolarBleApi.PolarDeviceDataType.HR, promise)
+          }
+
+          "OfflineACC" -> {
+            Log.d(TAG, "STOP OfflineACC Recording")
+            stopPolarOfflineRecording(deviceId, PolarBleApi.PolarDeviceDataType.ACC, promise)
+          }
+
+          "OfflineGYR" -> {
+            Log.d(TAG, "STOP OfflineGYR Recording")
+            stopPolarOfflineRecording(deviceId, PolarBleApi.PolarDeviceDataType.GYRO, promise)
+          }
+
+          "OfflinePPG" -> {
+            Log.d(TAG, "STOP OfflineGYR Recording")
+            stopPolarOfflineRecording(deviceId, PolarBleApi.PolarDeviceDataType.PPG, promise)
+          }
+
+          "OfflineMAG" -> {
+            Log.d(TAG, "STOP OfflineMAG Recording")
+            stopPolarOfflineRecording(deviceId, PolarBleApi.PolarDeviceDataType.MAGNETOMETER, promise)
+          }
+
+          "OfflinePPI" -> {
+            Log.d(TAG, "STOP OfflinePPI Recording")
+            stopPolarOfflineRecording(deviceId, PolarBleApi.PolarDeviceDataType.PPI, promise)
+          }
+          else -> {
+            Log.d(TAG, "Unknown feature: $feature")
+          }
+        }
+      }
+    } catch (polarInvalidArgument: PolarInvalidArgument) {
+      Log.e(TAG, "Failed to stop offline recording. Reason $polarInvalidArgument ")
+    }
+  }
+
+  private fun startPolarOfflineRecording(deviceId: String, recordingDataType: PolarBleApi.PolarDeviceDataType,
+                                         sensorSetting: PolarSensorSetting?,
+                                         promise: Promise){
+    val map: WritableMap = Arguments.createMap()
+    api.startOfflineRecording(deviceId, recordingDataType, sensorSetting, recordingKey)
+      .subscribe(
+      {
+        Log.d(TAG, "START offline ${recordingDataType} recording completed")
+        map.putString("result", "completed");
+        promise.resolve(map)
+      },
+      { throwable: Throwable ->
+        Log.e(TAG, "" + throwable.toString())
+        promise.reject("error", "Failed to start offline ${recordingDataType} recording", throwable)
+      }
+    )
+  }
+
+  private fun stopPolarOfflineRecording(deviceId: String, recordingDataType: PolarBleApi.PolarDeviceDataType,
+                                        promise: Promise){
+    val map: WritableMap = Arguments.createMap()
+    api.stopOfflineRecording(deviceId, recordingDataType)
+      .subscribe(
+        {
+          Log.d(TAG, "STOP offline ${recordingDataType} recording completed")
+          map.putString("result", "completed");
+          promise.resolve(map)
+        },
+        { throwable: Throwable ->
+          Log.e(TAG, "" + throwable.toString())
+          promise.reject("error", "Failed to stop offline ${recordingDataType} recording", throwable)
+        }
+      )
   }
 
   override fun downloadOfflineRecordings(deviceId: String){
@@ -300,6 +379,15 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
                         val unixTimestamp = firstSampleDateUTC + intervalInMs * index++;
                         val timestamp = Instant.ofEpochMilli(unixTimestamp)
                         Log.d(TAG, "HR data: ${timestamp} hr: ${sample.hr} correctedHr: ${sample.correctedHr} ppgQuality: ${sample.ppgQuality} entry $index of ${it.data.samples.size}")
+
+                        val event: WritableMap = Arguments.createMap()
+                        event.putString("data", OfflineRecording.HR.name)
+                        event.putInt("hr", sample.hr)
+                        event.putInt("correctedHr", sample.correctedHr)
+                        event.putInt("ppgQuality", sample.ppgQuality)
+                        event.putDouble("size", it.data.samples.size.toDouble()) // Use to track data transfer progress
+                        event.putDouble("timestamp", unixTimestamp.toDouble())
+                        sendEvent("PolarOfflineRecording", event)
                       }
                     }
                     is PolarOfflineRecordingData.AccOfflineRecording -> {
@@ -307,6 +395,15 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
                       var index = 0;
                       for (sample in it.data.samples) {
                         Log.d(TAG, "ACC data: time: ${sample.timeStamp} X: ${sample.x} Y: ${sample.y} Z: ${sample.z} entry ${++index} of ${it.data.samples.size}")
+
+                        val event: WritableMap = Arguments.createMap()
+                        event.putString("data", OfflineRecording.ACC.name)
+                        event.putInt("accX", sample.x)
+                        event.putInt("accY", sample.y)
+                        event.putInt("accZ", sample.z)
+                        event.putDouble("size", it.data.samples.size.toDouble())
+                        event.putDouble("timestamp", sample.timeStamp.toDouble())
+                        sendEvent("PolarOfflineRecording", event)
                       }
                     }
                     is PolarOfflineRecordingData.GyroOfflineRecording -> {
@@ -314,6 +411,15 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
                       var index = 0;
                       for (sample in it.data.samples) {
                         Log.d(TAG, "GYRO data: ${sample.timeStamp} X: ${sample.x} Y: ${sample.y} Z: ${sample.z} entry ${++index} of ${it.data.samples.size}")
+
+                        val event: WritableMap = Arguments.createMap()
+                        event.putString("data", OfflineRecording.GYRO.name)
+                        event.putString("gyrX", "${sample.x}")
+                        event.putString("gyrY", "${sample.y}")
+                        event.putString("gyrZ", "${sample.z}")
+                        event.putDouble("size", it.data.samples.size.toDouble())
+                        event.putDouble("timestamp", sample.timeStamp.toDouble())
+                        sendEvent("PolarOfflineRecording", event)
                       }
                     }
                     is PolarOfflineRecordingData.PpgOfflineRecording -> {
@@ -321,6 +427,16 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
                       var index = 0;
                       for (sample in it.data.samples) {
                         Log.d(TAG, "PPG data: ${sample.timeStamp} ppg0 ${sample.channelSamples[0]} ppg1 ${sample.channelSamples[1]} ppg2 ${sample.channelSamples[2]} ambient ${sample.channelSamples[3]} entry ${++index} of ${it.data.samples.size}")
+
+                        val event: WritableMap = Arguments.createMap()
+                        event.putString("data", OfflineRecording.PPG.name)
+                        event.putString("ppg0", "${sample.channelSamples[0]}")
+                        event.putString("ppg1", "${sample.channelSamples[1]}")
+                        event.putString("ppg2", "${sample.channelSamples[2]}")
+                        event.putString("ambient", "${sample.channelSamples[3]}")
+                        event.putDouble("size", it.data.samples.size.toDouble())
+                        event.putDouble("timestamp", sample.timeStamp.toDouble())
+                        sendEvent("PolarOfflineRecording", event)
                       }
                     }
                     else -> {
@@ -731,6 +847,81 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
     } catch(polarInvalidArgument: PolarInvalidArgument){
       Log.e(TAG, "Failed to fetch PPG Data. Reason $polarInvalidArgument ")
     }
+  }
+
+  fun buildTriggerFeatures(features: ReadableArray): Map<PolarBleApi.PolarDeviceDataType, PolarSensorSetting?> {
+    // Convert ReadableArray to List<String>
+    val featureList = List(features.size()) { index -> features.getString(index).orEmpty() }
+
+    // Prepare the trigger feature map
+    val triggerFeatures = mutableMapOf<PolarBleApi.PolarDeviceDataType, PolarSensorSetting?>()
+
+    for (feature in featureList) {
+      when (feature) {
+        "OfflineHR" -> {
+          Log.d(TAG, "Configuring OfflineHR settings")
+          triggerFeatures[PolarBleApi.PolarDeviceDataType.HR] = null
+        }
+
+        "OfflineACC" -> {
+          Log.d(TAG, "Configuring OfflineACC settings")
+          triggerFeatures[PolarBleApi.PolarDeviceDataType.ACC] = PolarSensorSetting(
+            mapOf(
+              PolarSensorSetting.SettingType.SAMPLE_RATE to 52,
+              PolarSensorSetting.SettingType.RESOLUTION to 16,
+              PolarSensorSetting.SettingType.RANGE to 8,
+              PolarSensorSetting.SettingType.CHANNELS to 3
+            )
+          )
+        }
+
+        "OfflineGYR" -> {
+          Log.d(TAG, "Configuring OfflineGYR settings")
+          triggerFeatures[PolarBleApi.PolarDeviceDataType.GYRO] = PolarSensorSetting(
+            mapOf(
+              PolarSensorSetting.SettingType.SAMPLE_RATE to 52,
+              PolarSensorSetting.SettingType.RESOLUTION to 16,
+              PolarSensorSetting.SettingType.RANGE to 2000,
+              PolarSensorSetting.SettingType.CHANNELS to 3
+            )
+          )
+        }
+
+        "OfflinePPG" -> {
+          Log.d(TAG, "Configuring OfflinePPG settings")
+          triggerFeatures[PolarBleApi.PolarDeviceDataType.PPG] = PolarSensorSetting(
+            mapOf(
+              PolarSensorSetting.SettingType.SAMPLE_RATE to 55,
+              PolarSensorSetting.SettingType.RESOLUTION to 22,
+              PolarSensorSetting.SettingType.CHANNELS to 4
+            )
+          )
+        }
+
+        "OfflineMAG" -> {
+          Log.d(TAG, "Configuring OfflineMAG settings")
+          triggerFeatures[PolarBleApi.PolarDeviceDataType.MAGNETOMETER] = PolarSensorSetting(
+            mapOf(
+              PolarSensorSetting.SettingType.SAMPLE_RATE to 10,
+              PolarSensorSetting.SettingType.RESOLUTION to 16,
+              PolarSensorSetting.SettingType.RANGE to 50,
+              PolarSensorSetting.SettingType.CHANNELS to 3
+            )
+          )
+        }
+
+        "OfflinePPI" -> {
+          Log.d(TAG, "Configuring OfflinePPI settings")
+          triggerFeatures[PolarBleApi.PolarDeviceDataType.PPI] = null
+        }
+
+        else -> {
+          Log.d(TAG, "Unknown feature: $feature")
+        }
+      }
+    }
+
+    return triggerFeatures
   }
 
   override fun disposeHrStream(){

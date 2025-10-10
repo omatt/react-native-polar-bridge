@@ -25,7 +25,9 @@ export default function App(){
 
   // ...
 
-  connectToDevice(deviceId);
+  connectToDevice(deviceId).then((device: DeviceConnected) =>{
+    console.log(`Connected Polar Device: ${device.connectedDeviceId} Battery Level: ${device.batteryLevel}%`);
+  });
 }
 
 ```
@@ -158,6 +160,24 @@ const ppgListener = polarEmitter.addListener(emittedEventId.POLAR_PPG_DATA, (dat
 > gyrListener.remove();
 > ppgListener.remove();
 > ```
+
+### Offline Recording
+
+Start Offline Recording
+
+```js
+startOfflineRecording(connectedDeviceId, offlineRecordingFeatureList).then((data) =>{
+  console.log('Polar Start Offline Recording', `Result: ${data.result}`);
+});
+```
+
+Stop Offline Recording
+
+```js
+stopOfflineRecording(connectedDeviceId, offlineRecordingFeatureList).then((data) =>{
+  console.log('Polar Stop Offline Recording', `Result: ${data.result}`);
+});
+```
 
 ### Offline Recording Trigger
 

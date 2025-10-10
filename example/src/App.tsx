@@ -32,7 +32,7 @@ import {
   getDiskSpace,
   OfflineRecordingFeature,
   fetchOfflineRecordings,
-  deleteAllOfflineRecordings, downloadOfflineRecordings,
+  deleteAllOfflineRecordings, downloadOfflineRecordings, startOfflineRecording, stopOfflineRecording,
 } from 'react-native-polar-bridge';
 import { useEffect, useState } from 'react';
 
@@ -47,7 +47,7 @@ import {
   logPpgToCSV,
 } from './services/writer';
 import type {
-  AccData,
+  AccData, DeviceConnected,
   DeviceTime,
   DiskSpace,
   GyrData,
@@ -327,8 +327,10 @@ export default function App() {
     };
   }, [isLogCSVEnabled]);
 
-  const handleConnect = () => {
-    connectToDevice(deviceId);
+  const handleConnect = (deviceId: string) => {
+    connectToDevice(deviceId).then((device: DeviceConnected) =>{
+      console.log(`Connected Polar Device: ${device.connectedDeviceId} Battery Level: ${device.batteryLevel}%`);
+    });
   };
   //
   // const handleDisconnect = () => {
@@ -398,6 +400,9 @@ export default function App() {
 
   const getOfflineRecordingList = (connectedDeviceId: string) =>{
     fetchOfflineRecordings(connectedDeviceId).then((offlineRecordings: OfflineRecording[]) =>{
+      console.log('Polar Offline Recording', `List length ${offlineRecordings.length}`);
+      // Sort by oldest to newest
+      offlineRecordings.sort((a, b) => a.recTimestamp - b.recTimestamp);
       offlineRecordings.forEach((offlineRecordingEntry: OfflineRecording) =>{
         console.log('Polar Offline Recording', `Recording Start: ${offlineRecordingEntry.recTimestamp} Path: ${offlineRecordingEntry.path} Size: ${offlineRecordingEntry.size}`);
       });
@@ -418,12 +423,27 @@ export default function App() {
     });
   }
 
+  const startPolarOfflineRecording = (connectedDeviceId: string)=>{
+    getPolarDiskSpace(connectedDeviceId);
+    startOfflineRecording(connectedDeviceId, offlineRecordingFeatureList).then((data) =>{
+      console.log('Polar Start Offline Recording', `Result: ${data.result}`);
+    });
+  }
+
+  const stopPolarOfflineRecording = (connectedDeviceId: string)=>{
+    getPolarDiskSpace(connectedDeviceId);
+    stopOfflineRecording(connectedDeviceId, offlineRecordingFeatureList).then((data) =>{
+      console.log('Polar Stop Offline Recording', `Result: ${data.result}`);
+    });
+  }
+
   return (
     <ScrollView style={styles.scrollContainer}>
       <View style={styles.container}>
         {/*<Text>Result: {result}</Text>*/}
         <View style={styles.buttonContainer}>
-          <Button title={`Connect ${deviceId}`} onPress={handleConnect} />
+          <Button title={`Connect ${deviceId}`}
+                  onPress={() =>{handleConnect(deviceId)}} />
         </View>
         {/*<View style={styles.buttonContainer}>*/}
         {/*  <Button title="Disconnect" onPress={handleDisconnect}/></View>*/}
@@ -468,7 +488,7 @@ export default function App() {
                           stopAllStream();
                           disconnectFromDevice(connectedDeviceId);
                         }
-                        connectToDevice(device.deviceId);
+                        handleConnect(device.deviceId);
                         setConnectedDeviceId(device.deviceId);
                       }
                     }}
@@ -589,6 +609,30 @@ export default function App() {
             onPress={() => {
               if (connectedDeviceId != null) {
                 getPolarDiskSpace(connectedDeviceId);
+              } else {
+                displayDialogNoConnectedDevice();
+              }
+            }}
+          />
+        </View>
+        <View style={styles.buttonContainer}>
+          <Button
+            title='Start Offline Recording'
+            onPress={() => {
+              if (connectedDeviceId != null) {
+                startPolarOfflineRecording(connectedDeviceId);
+              } else {
+                displayDialogNoConnectedDevice();
+              }
+            }}
+          />
+        </View>
+        <View style={styles.buttonContainer}>
+          <Button
+            title='Stop Offline Recording'
+            onPress={() => {
+              if (connectedDeviceId != null) {
+                stopPolarOfflineRecording(connectedDeviceId);
               } else {
                 displayDialogNoConnectedDevice();
               }
