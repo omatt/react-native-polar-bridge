@@ -31,7 +31,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     return true
   }
+}
 
+class ReactNativeDelegate: RCTDefaultReactNativeFactoryDelegate {
   override func sourceURL(for bridge: RCTBridge) -> URL? {
     self.bundleURL()
   }

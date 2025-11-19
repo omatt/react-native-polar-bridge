@@ -3,9 +3,6 @@ import {
   View,
   StyleSheet,
   Button,
-  Platform,
-  PermissionsAndroid,
-  type Permission,
   NativeModules,
   NativeEventEmitter,
   Alert, ScrollView, Switch,
@@ -32,7 +29,7 @@ import {
   getDiskSpace,
   OfflineRecordingFeature,
   fetchOfflineRecordings,
-  deleteAllOfflineRecordings, downloadOfflineRecordings, startOfflineRecording, stopOfflineRecording,
+  deleteAllOfflineRecordings, downloadOfflineRecordings, startOfflineRecording, stopOfflineRecording, multiply,
 } from 'react-native-polar-bridge';
 import { useEffect, useState } from 'react';
 
@@ -54,11 +51,12 @@ import type {
   HrData, OfflineRecording,
   PpgData, ScannedDevice,
 } from '../../src/PolarDataModel';
+import {checkPermission, requestPermissions} from "./utils/permissions_manager";
 
-// const result = multiply(3, 7);
+const result = multiply(3, 7);
 
-const nativeModule = NativeModules.YourNativeModuleName;
-const polarEmitter = new NativeEventEmitter(nativeModule);
+const {PolarBridge} = NativeModules;
+const polarEmitter = new NativeEventEmitter(PolarBridge);
 
 const displayDialogNoConnectedDevice = () => {
   console.log('Empty Device ID or no connected Device');
@@ -70,7 +68,14 @@ const displayDialogNoConnectedDevice = () => {
 export default function App() {
   // const deviceId = 'D8207828';
   const deviceId = 'D8455025';
-  requestBluetoothPermissions().then();
+  console.log(`Result: ${result}`)
+  // requestBluetoothPermissions().then();
+
+  checkPermission().then((isGranted: boolean) =>{
+    if(!isGranted){
+      requestPermissions().then();
+    }
+  });
 
   const [isHRStreamToggled, setIsHRStreamToggled] = useState(false);
   const toggleHRStreamStatus = () => setIsHRStreamToggled((prev) => !prev);
@@ -326,10 +331,24 @@ export default function App() {
       completePpgListener.remove();
     };
   }, [isLogCSVEnabled]);
+  //
+  // useEffect(() => {
+  //   const downloadOfflineRecordingListener = polarEmitter.addListener(
+  //     emittedEventId.POLAR_OFFLINE_RECORDING,
+  //     (offlineRecording: any) => {
+  //       console.log(`${offlineRecording}`);
+  //     }
+  //   );
+  //   return () =>{
+  //     downloadOfflineRecordingListener.remove();
+  //   };
+  // }, []);
 
   const handleConnect = (deviceId: string) => {
+    console.log('DEBUG ME handleConnect');
     connectToDevice(deviceId).then((device: DeviceConnected) =>{
-      console.log(`Connected Polar Device: ${device.connectedDeviceId} Battery Level: ${device.batteryLevel}%`);
+      console.log(`DEBUG ME Connected Polar Device: ${device.connectedDeviceId} Battery Level: ${device.batteryLevel}%`);
+      setConnectedDeviceId(deviceId);
     });
   };
   //
@@ -489,7 +508,6 @@ export default function App() {
                           disconnectFromDevice(connectedDeviceId);
                         }
                         handleConnect(device.deviceId);
-                        setConnectedDeviceId(device.deviceId);
                       }
                     }}
                   />
@@ -709,56 +727,6 @@ export default function App() {
     </ScrollView>
   );
 }
-
-export const requestBluetoothPermissions = async (): Promise<boolean> => {
-  if (Platform.OS === 'android') {
-    try {
-      // Android 12+ (API 31+)
-      const permissions: Permission[] = [
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-        PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
-        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-      ];
-
-      const granted = await PermissionsAndroid.requestMultiple(permissions);
-
-      const allGranted = Object.values(granted).every(
-        (status) => status === PermissionsAndroid.RESULTS.GRANTED
-      );
-
-      const denied: string[] = [];
-
-      permissions.forEach((perm) => {
-        const status = granted[perm];
-        if (status !== PermissionsAndroid.RESULTS.GRANTED) {
-          denied.push(perm);
-        }
-      });
-
-      if (denied.length > 0) {
-        console.warn('Denied permissions:', denied.join(', '));
-        // Alert.alert(
-        //   'Missing Permissions',
-        //   `The following permissions were not granted:\n\n${denied.join('\n')}`
-        // );
-        return false;
-      }
-
-      if (!allGranted) {
-        console.warn('Not all Bluetooth permissions granted');
-        return false;
-      }
-
-      return true;
-    } catch (err) {
-      console.error('Failed to request Bluetooth permissions:', err);
-      return false;
-    }
-  }
-
-  return true;
-};
 
 const styles = StyleSheet.create({
   container: {

@@ -15,6 +15,7 @@ export interface Spec extends TurboModule {
   getDeviceTime(deviceId: string): Promise<DeviceTime>;
   setDeviceTime(deviceId: string): void;
   getDiskSpace(deviceId: string): Promise<DiskSpace>;
+  doFactoryReset(deviceId: string): void;
   startOfflineRecording(deviceId: string, features: string[]): Promise<any>;
   stopOfflineRecording(deviceId: string, features: string[]): Promise<any>;
   setPolarRecordingTrigger(deviceId: string, recordingMode: number, features: string[]): void;

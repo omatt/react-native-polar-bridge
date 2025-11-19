@@ -564,6 +564,24 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
       )
   }
 
+  override fun doFactoryReset(deviceId: String) {
+    val calendar = Calendar.getInstance()
+    calendar.time = Date()
+    Log.e(TAG, "Set device: $deviceId time to ${calendar.time}")
+    try {
+      api.doFactoryReset(deviceId, preservePairingInformation = true)
+        .observeOn(AndroidSchedulers.mainThread())
+        .subscribe(
+          {
+            Log.d(TAG, "send do factory reset to device")
+          },
+          { error: Throwable -> Log.e(TAG, "doFactoryReset() failed: $error") }
+        )
+    } catch(polarInvalidArgument: PolarInvalidArgument){
+      Log.e(TAG, "Failed to do factory reset. Reason $polarInvalidArgument ")
+    }
+  }
+
   override fun scanDevices() {
     Log.e(TAG, "Scan Devices")
     val isDisposed = scanDisposable?.isDisposed ?: true

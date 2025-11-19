@@ -52,6 +52,10 @@ export function getDiskSpace(deviceId: string) {
   return PolarBridge.getDiskSpace(deviceId);
 }
 
+export function doFactoryReset(deviceId: string) {
+  return PolarBridge.doFactoryReset(deviceId);
+}
+
 export function startOfflineRecording(deviceId: string, features: string[]) {
   return PolarBridge.startOfflineRecording(deviceId, features);
 }
@@ -110,6 +114,7 @@ export const emittedEventId = Object.freeze({
   POLAR_PPG_ERROR: 'PolarPpgError',
   POLAR_PPG_COMPLETE: 'PolarPpgComplete',
   POLAR_DISK_SPACE: 'PolarDiskSpace',
+  POLAR_OFFLINE_RECORDING : 'PolarOfflineRecording',
 });
 
 export const OfflineRecordingFeature = Object.freeze({
