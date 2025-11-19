@@ -1,8 +1,3 @@
-// #import "PolarBridge.h"
-//
-// @implementation PolarBridge
-// RCT_EXPORT_MODULE()
-
 #import <React/RCTBridgeModule.h>
 #import <React/RCTEventEmitter.h>
 
@@ -20,5 +15,9 @@ RCT_EXTERN_METHOD(fetchHrData:(NSString *)deviceId)
 RCT_EXTERN_METHOD(disposeHrStream)
 RCT_EXTERN_METHOD(fetchAccData:(NSString *)deviceId)
 RCT_EXTERN_METHOD(disposeAccStream)
+RCT_EXTERN_METHOD(fetchGyrData:(NSString *)deviceId)
+RCT_EXTERN_METHOD(disposeGyrStream)
+RCT_EXTERN_METHOD(fetchPpgData:(NSString *)deviceId)
+RCT_EXTERN_METHOD(disposePpgStream)
 
 @end
