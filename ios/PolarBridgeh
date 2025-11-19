@@ -1,0 +1,7 @@
+// TODO Remove
+// 2025-11-19 @omatthew
+// Unused header file
+//#import <React/RCTBridgeModule.h>
+//#import <React/RCTEventEmitter.h>
+//@interface PolarBridge : RCTEventEmitter <RCTBridgeModule>
+//@end

@@ -1,4 +1,0 @@
-#import <React/RCTBridgeModule.h>
-#import <React/RCTEventEmitter.h>
-@interface PolarBridge : RCTEventEmitter <RCTBridgeModule>
-@end

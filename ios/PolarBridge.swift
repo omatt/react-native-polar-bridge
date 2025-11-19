@@ -7,6 +7,9 @@ enum PolarEvent: String, CaseIterable {
     case onDeviceFound
     case onScanError
     case onScanComplete
+    case PolarHrData
+    case PolarHrError
+    case PolarHrComplete
 }
 
 enum PolarBleError: Error {
@@ -24,6 +27,14 @@ class PolarBridge: RCTEventEmitter, ObservableObject
     private var pendingRejecter: RCTPromiseRejectBlock?
 
     private var scanDisposable: Disposable?
+    private var hrDisposable: Disposable?
+    private var isHrStreaming = false
+    private var accDisposable: Disposable?
+    private var isAccStreaming = false
+    private var gyrDisposable: Disposable?
+    private var isGyrStreaming = false
+    private var ppgDisposable: Disposable?
+    private var isPpgStreaming = false
     private let disposeBag = DisposeBag()
 
     @objc
@@ -94,6 +105,75 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         }
     }
 
+    @objc(fetchHrData:)
+    func fetchHrData(_ deviceId: String) {
+        NSLog("PolarBridge: Fetch HR Data called on: \(deviceId)")
+
+        guard let api = api else {
+            NSLog("PolarBridge: Polar API not initialized")
+            return
+        }
+
+        // Dispose previous subscription if running
+        if isHrStreaming {
+            hrDisposable?.dispose()
+            NSLog("PolarBridge: HR Stream stopped")
+            sendEvent(withName: PolarEvent.PolarHrComplete.rawValue, body: ["message": "HR Stream stopped"])
+        }
+
+        // Start HR streaming
+        hrDisposable = api.startHrStreaming(deviceId)
+            .observe(on: MainScheduler.instance)
+            .subscribe(
+                onNext: { [weak self] hrData in
+                    guard let self = self else { return }
+                    NSLog("PolarBridge: HR data samples count: \(hrData.count)")
+
+                    for sample in hrData {
+                        NSLog("HR bpm: \(sample.hr), rrs: \(sample.rrsMs), rrAvailable: \(sample.rrAvailable), contactStatus: \(sample.contactStatus), contactStatusSupported: \(sample.contactStatusSupported)")
+
+                        // Create dictionary to send as event
+                        var event: [String: Any] = [:]
+                        event["hr"] = sample.hr
+                        event["rrsMs"] = sample.rrsMs
+                        event["rrAvailable"] = sample.rrAvailable
+                        event["contactStatus"] = sample.contactStatus
+                        event["contactStatusSupported"] = sample.contactStatusSupported
+
+                        self.sendEvent(withName: PolarEvent.PolarHrData.rawValue, body: event)
+                    }
+                },
+                onError: { [weak self] error in
+                    guard let self = self else { return }
+                    NSLog("PolarBridge: HR stream failed: \(error.localizedDescription)")
+                    self.sendEvent(withName: PolarEvent.PolarHrError.rawValue, body: ["error": error.localizedDescription])
+                },
+                onCompleted: { [weak self] in
+                    guard let self = self else { return }
+                    NSLog("PolarBridge: HR stream complete")
+                    self.sendEvent(withName: PolarEvent.PolarHrComplete.rawValue, body: ["message": "HR stream complete"])
+                }
+            )
+
+        hrDisposable?.disposed(by: disposeBag)
+
+    }
+
+    @objc func disposeHrStream(){
+        hrDisposable?.dispose()
+    }
+
+    @objc func disposeAccStream(){
+        accDisposable?.dispose()
+    }
+
+    private func disposeAllStreams() {
+        hrDisposable?.dispose()
+        accDisposable?.dispose()
+        gyrDisposable?.dispose()
+        ppgDisposable?.dispose()
+      }
+
     // Returns promise for connecting to the device
     private func maybeResolve() {
         if deviceConnected && batteryReceived {
@@ -112,6 +192,10 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         return PolarEvent.allCases.map { $0.rawValue }
     }
 
+    override static func requiresMainQueueSetup() -> Bool {
+        return true
+    }
+
     @objc func scanDevices() {
         NSLog("PolarBridge: Scan Devices triggered")
 
@@ -125,7 +209,7 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         } else {
           // scanDisposable is nil
           NSLog("PolarBridge: No active scan")
-      }
+        }
 
         guard let api = api else {
             NSLog("PolarBridge API not initialized")
