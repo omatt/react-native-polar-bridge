@@ -12,7 +12,31 @@ npm install react-native-polar-bridge
 
 This React Native library uses the [polar-ble-sdk](https://github.com/polarofficial/polar-ble-sdk).
 
-> ⚠️ The library only has support for Android devices.
+Supported Functions
+
+
+| Polar SDK Feature          | Android | iOS |
+|----------------------------|---------|-----|
+|  connectToDevice           |✅|✅|
+| disconnectFromDevice       |✅|✅|
+| scanDevices()              |✅|✅|
+| fetchHrData                |✅|✅|
+| fetchAccData               |✅|✅|
+| fetchGyrData               |✅|✅|
+| fetchPpgData               |✅|✅|
+| enableSdkMode              |✅|❌|
+| disableSdkMode             |✅|❌|
+| getDeviceTime              |✅|✅|
+| setDeviceTime              |✅|✅|
+| getDiskSpace               |✅|✅|
+| startOfflineRecording      |✅|❌|
+| stopOfflineRecording       |✅|❌|
+| setPolarRecordingTrigger   |✅|❌|
+| fetchOfflineRecordings     |⚠️|❌|
+| downloadOfflineRecordings  |⚠️|❌|
+| deleteAllOfflineRecordings |✅|❌|
+
+✅ - Implemented ❌ - Not yet implemented ⚠️ - Not fully implemented
 
 ### Connecting to Device
 
@@ -36,6 +60,15 @@ export default function App(){
 
 ```js
 disconnectFromDevice(deviceId);
+```
+
+### Initialize NativeModules
+
+Import `NativeModules` from react-native to expose native code to be able to listen to emitted events.
+
+```js
+const {PolarBridge} = NativeModules;
+const polarEmitter = new NativeEventEmitter(PolarBridge);
 ```
 
 ### Scan Devices
