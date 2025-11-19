@@ -169,7 +169,7 @@ class PolarBridge: RCTEventEmitter, ObservableObject
 
         // Dispose previous subscription if running
         if isHrStreaming {
-            hrDisposable?.dispose()
+            disposeHrStream()
             NSLog("PolarBridge: HR Stream stopped")
             sendEvent(withName: PolarEvent.PolarHrComplete.rawValue, body: ["message": "HR Stream stopped"])
             return
@@ -226,7 +226,7 @@ class PolarBridge: RCTEventEmitter, ObservableObject
 
         // Stop existing ACC stream if running
         if isAccStreaming {
-            accDisposable?.dispose()
+            disposeAccStream()
             NSLog("PolarBridge: ACC Stream stopped")
             sendEvent(withName: PolarEvent.PolarAccComplete.rawValue, body: ["message": "ACC Stream stopped"])
             return
@@ -294,7 +294,7 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         }
 
         if isGyrStreaming {
-            gyrDisposable?.dispose()
+            disposeGyrStream()
             NSLog("PolarBridge: GYR Stream stopped")
             sendEvent(withName: PolarEvent.PolarAccComplete.rawValue, body: ["message": "GYR Stream stopped"])
             return
@@ -369,7 +369,7 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         }
 
         if isPpgStreaming {
-            gyrDisposable?.dispose()
+            disposePpgStream()
             NSLog("PolarBridge: PPG Stream stopped")
             sendEvent(withName: PolarEvent.PolarAccComplete.rawValue, body: ["message": "PPG Stream stopped"])
             return
@@ -465,7 +465,123 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         disposeAccStream()
         disposeGyrStream()
         disposeAccStream()
-      }
+    }
+
+    @objc(setDeviceTime:)
+    func setDeviceTime(_ deviceId: String) {
+        NSLog("PolarBridge: Set device time for: \(deviceId)")
+
+        guard let api = api else {
+            NSLog("PolarBridge: Polar API not initialized")
+            return
+        }
+
+        let now = Date()
+        let timeZone = TimeZone.current
+        NSLog("PolarBridge: Set device: \(deviceId) time to \(now)")
+
+        api.setLocalTime(deviceId, time: now, zone: timeZone)
+            .observe(on: MainScheduler.instance)
+            .subscribe(
+                onCompleted: {
+                    let timeSetString = "Time \(now) set to device"
+                    NSLog("PolarBridge: \(timeSetString)")
+                },
+                onError: { error in
+                    NSLog("PolarBridge: Set time failed: \(error.localizedDescription)")
+                }
+            )
+    }
+
+    @objc(getDeviceTime:resolver:rejecter:)
+    func getDeviceTime(
+        _ deviceId: String,
+        resolver resolve: @escaping RCTPromiseResolveBlock,
+        rejecter reject: @escaping RCTPromiseRejectBlock
+    ) {
+        NSLog("PolarBridge: Get device time for: \(deviceId)")
+
+        guard let api = api else {
+            reject("UNCONFIGURED", "Polar API not initialized", nil)
+            return
+        }
+
+        api.getLocalTime(deviceId)
+            .observe(on: MainScheduler.instance)
+            .subscribe(
+                onSuccess: { date in
+                    let timeGetString = "\(date) read from the device"
+                    NSLog("PolarBridge: \(timeGetString)")
+
+                    let result: [String: Any] = [
+                        "time": "\(date)",
+                        "timeMs": Double(date.timeIntervalSince1970 * 1000)
+                    ]
+
+                    resolve(result)
+                },
+                onFailure: { error in
+                    NSLog("PolarBridge: Get time failed: \(error.localizedDescription)")
+                    reject("GET_DEVICE_TIME_ERROR", "Failed to get device time", error)
+                }
+            )
+            .disposed(by: disposeBag)
+    }
+
+    @objc(getDiskSpace:resolver:rejecter:)
+    func getDiskSpace(
+        _ deviceId: String,
+        resolver resolve: @escaping RCTPromiseResolveBlock,
+        rejecter reject: @escaping RCTPromiseRejectBlock
+    ) {
+        NSLog("PolarBridge: Get Disk Space")
+
+        guard let api = api else {
+            reject("UNCONFIGURED", "Polar API not initialized", nil)
+            return
+        }
+
+        api.getDiskSpace(deviceId)
+            .observe(on: MainScheduler.instance)
+            .subscribe(
+                onSuccess: { diskSpace in
+                    NSLog("Disk space left: \(diskSpace.freeSpace)/\(diskSpace.totalSpace) Bytes")
+
+                    // React Native doesn't support Int64: convert to Double
+                    let result: [String: Any] = [
+                        "freeSpace": Double(diskSpace.freeSpace),
+                        "totalSpace": Double(diskSpace.totalSpace)
+                    ]
+
+                    resolve(result)
+                },
+                onFailure: { error in
+                    NSLog("Get disk space failed: \(error.localizedDescription)")
+                    reject("GET_DISK_SPACE_ERROR", "Failed to get device disk space", error)
+                }
+            )
+    }
+
+    @objc(doFactoryReset:)
+    func doFactoryReset(_ deviceId: String) {
+        NSLog("PolarBridge: do factory reset for: \(deviceId)")
+
+        guard let api = api else {
+            NSLog("PolarBridge: Polar API not initialized")
+            return
+        }
+
+        api.doFactoryReset(deviceId, preservePairingInformation: true)
+            .observe(on: MainScheduler.instance)
+            .subscribe(
+                onCompleted: {
+                    NSLog("PolarBridge: send do factory reset to device")
+                },
+                onError: { error in
+                    NSLog("PolarBridge: do factory reset failed: \(error.localizedDescription)")
+                }
+            )
+    }
 
     // Returns promise for connecting to the device
     private func maybeResolve() {

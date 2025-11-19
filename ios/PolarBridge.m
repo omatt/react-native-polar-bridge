@@ -19,5 +19,13 @@ RCT_EXTERN_METHOD(fetchGyrData:(NSString *)deviceId)
 RCT_EXTERN_METHOD(disposeGyrStream)
 RCT_EXTERN_METHOD(fetchPpgData:(NSString *)deviceId)
 RCT_EXTERN_METHOD(disposePpgStream)
+RCT_EXTERN_METHOD(setDeviceTime:(NSString *)deviceId)
+RCT_EXTERN_METHOD(getDeviceTime:(NSString *)deviceId
+                 resolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(getDiskSpace:(NSString *)deviceId
+                 resolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(doFactoryReset:(NSString *)deviceId)
 
 @end
