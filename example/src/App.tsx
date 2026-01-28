@@ -66,8 +66,8 @@ const displayDialogNoConnectedDevice = () => {
 };
 
 export default function App() {
-  // const deviceId = 'D8207828';
-  const deviceId = 'D8455025';
+  const deviceId = 'D8207828';
+  // const deviceId = 'D8455025';
   console.log(`Result: ${result}`)
   // requestBluetoothPermissions().then();
 
@@ -157,7 +157,7 @@ export default function App() {
         // console.log('Received HR data:', data);
         console.log(
           'Heart Rate:',
-          `${data.hr} bpm timestamp: ${formatDateYYYYMMDDHHMMSS(new Date())}`
+          `${data.hr} bpm timestamp: ${formatDateYYYYMMDDHHMMSS(data.timestamp)}`
         );
         if(isLogCSVEnabled) {
           logHeartRateToCSV(data.hr).then();

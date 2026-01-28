@@ -23,6 +23,7 @@ export type HrData = {
   rrAvailable: boolean;
   contactStatus: boolean;
   contactStatusSupported: boolean;
+  timestamp: number;
 };
 
 export type AccData = {
