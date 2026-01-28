@@ -46,6 +46,9 @@ class PolarBridge: RCTEventEmitter, ObservableObject
     private var isPpgStreaming = false
     private let disposeBag = DisposeBag()
 
+    /// Flush interval for all sensor buffers (seconds)
+    private let sensorFlushInterval: TimeInterval = 10.0
+
     @objc
     func multiply(_ a: NSNumber,withB b: NSNumber) -> NSNumber {
         let result = a.doubleValue * b.doubleValue
@@ -158,6 +161,53 @@ class PolarBridge: RCTEventEmitter, ObservableObject
             .asObservable()
     }
 
+    private var hrBuffer: [[String: Any]] = []
+    private let hrBufferQueue = DispatchQueue(label: "com.polarbridge.hrBufferQueue")
+    private var hrFlushTimer: Timer?
+
+    private func startHrFlushTimer() {
+        stopHrFlushTimer()
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+
+            self.hrFlushTimer = Timer(
+                timeInterval: self.sensorFlushInterval,
+                repeats: true
+            ) { [weak self] _ in
+                self?.flushHrBuffer()
+            }
+
+            RunLoop.main.add(self.hrFlushTimer!, forMode: .common)
+        }
+    }
+
+    private func stopHrFlushTimer() {
+        DispatchQueue.main.async { [weak self] in
+            self?.hrFlushTimer?.invalidate()
+            self?.hrFlushTimer = nil
+        }
+    }
+
+    private func flushHrBuffer() {
+        hrBufferQueue.async { [weak self] in
+            guard let self = self else { return }
+            guard !self.hrBuffer.isEmpty else { return }
+
+            let events = self.hrBuffer
+            self.hrBuffer.removeAll()
+
+            DispatchQueue.main.async {
+                for event in events {
+                    self.sendEvent(
+                        withName: PolarEvent.PolarHrData.rawValue,
+                        body: event
+                    )
+                }
+            }
+        }
+    }
+
     @objc(fetchHrData:)
     func fetchHrData(_ deviceId: String) {
         NSLog("PolarBridge: Fetch HR Data called on: \(deviceId)")
@@ -170,12 +220,17 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         // Dispose previous subscription if running
         if isHrStreaming {
             disposeHrStream()
+            stopHrFlushTimer()
+            flushHrBuffer()
+            isHrStreaming = false
+
             NSLog("PolarBridge: HR Stream stopped")
             sendEvent(withName: PolarEvent.PolarHrComplete.rawValue, body: ["message": "HR Stream stopped"])
             return
         }
 
         isHrStreaming = true
+        startHrFlushTimer()
 
         // Start HR streaming
         hrDisposable = api.startHrStreaming(deviceId)
@@ -185,34 +240,103 @@ class PolarBridge: RCTEventEmitter, ObservableObject
                     guard let self = self else { return }
                     NSLog("PolarBridge: HR data samples count: \(hrData.count)")
 
-                    for sample in hrData {
-                        NSLog("HR bpm: \(sample.hr), rrs: \(sample.rrsMs), rrAvailable: \(sample.rrAvailable), contactStatus: \(sample.contactStatus), contactStatusSupported: \(sample.contactStatusSupported)")
+                    self.hrBufferQueue.async {
+                        for sample in hrData {
+                            NSLog("HR bpm: \(sample.hr), rrs: \(sample.rrsMs), rrAvailable: \(sample.rrAvailable), contactStatus: \(sample.contactStatus), contactStatusSupported: \(sample.contactStatusSupported)")
 
-                        // Create dictionary to send as event
-                        var event: [String: Any] = [:]
-                        event["hr"] = sample.hr
-                        event["rrsMs"] = sample.rrsMs
-                        event["rrAvailable"] = sample.rrAvailable
-                        event["contactStatus"] = sample.contactStatus
-                        event["contactStatusSupported"] = sample.contactStatusSupported
+                            // Create dictionary to send as event
+                            var event: [String: Any] = [:]
+                            event["hr"] = sample.hr
+                            event["rrsMs"] = sample.rrsMs
+                            event["rrAvailable"] = sample.rrAvailable
+                            event["contactStatus"] = sample.contactStatus
+                            event["contactStatusSupported"] = sample.contactStatusSupported
+                            event["timestamp"] = Date().timeIntervalSince1970 * 1000
 
-                        self.sendEvent(withName: PolarEvent.PolarHrData.rawValue, body: event)
+//                             self.sendEvent(withName: PolarEvent.PolarHrData.rawValue, body: event)
+                            self.hrBuffer.append(event)
+                        }
                     }
                 },
                 onError: { [weak self] error in
                     guard let self = self else { return }
                     NSLog("PolarBridge: HR stream failed: \(error.localizedDescription)")
+                    self.stopHrFlushTimer()
+                    self.flushHrBuffer()
+                    self.isHrStreaming = false
+
                     self.sendEvent(withName: PolarEvent.PolarHrError.rawValue, body: ["error": error.localizedDescription])
                 },
                 onCompleted: { [weak self] in
                     guard let self = self else { return }
                     NSLog("PolarBridge: HR stream complete")
+                    self.stopHrFlushTimer()
+                    self.flushHrBuffer()
+                    self.isHrStreaming = false
                     self.sendEvent(withName: PolarEvent.PolarHrComplete.rawValue, body: ["message": "HR stream complete"])
                 }
             )
 
         hrDisposable?.disposed(by: disposeBag)
 
+    }
+
+    // ACC
+    private var accBuffer: [[String: Any]] = []
+    private let accBufferQueue = DispatchQueue(label: "com.polarbridge.accBufferQueue")
+    private var accFlushTimer: Timer?
+
+    // GYR
+    private var gyrBuffer: [[String: Any]] = []
+    private let gyrBufferQueue = DispatchQueue(label: "com.polarbridge.gyrBufferQueue")
+    private var gyrFlushTimer: Timer?
+
+    // PPG
+    private var ppgBuffer: [[String: Any]] = []
+    private let ppgBufferQueue = DispatchQueue(label: "com.polarbridge.ppgBufferQueue")
+    private var ppgFlushTimer: Timer?
+
+    private func startAccFlushTimer() {
+        stopAccFlushTimer()
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+
+            self.accFlushTimer = Timer(
+                timeInterval: self.sensorFlushInterval,
+                repeats: true
+            ) { [weak self] _ in
+                self?.flushAccBuffer()
+            }
+
+            RunLoop.main.add(self.accFlushTimer!, forMode: .common)
+        }
+    }
+
+    private func stopAccFlushTimer() {
+        DispatchQueue.main.async { [weak self] in
+            self?.accFlushTimer?.invalidate()
+            self?.accFlushTimer = nil
+        }
+    }
+
+    private func flushAccBuffer() {
+        accBufferQueue.async { [weak self] in
+            guard let self = self else { return }
+            guard !self.accBuffer.isEmpty else { return }
+
+            let events = self.accBuffer
+            self.accBuffer.removeAll()
+
+            DispatchQueue.main.async {
+                for event in events {
+                    self.sendEvent(
+                        withName: PolarEvent.PolarAccData.rawValue,
+                        body: event
+                    )
+                }
+            }
+        }
     }
 
     @objc(fetchAccData:)
@@ -227,12 +351,17 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         // Stop existing ACC stream if running
         if isAccStreaming {
             disposeAccStream()
+            stopAccFlushTimer()
+            flushAccBuffer()
+            isAccStreaming = false
+
             NSLog("PolarBridge: ACC Stream stopped")
             sendEvent(withName: PolarEvent.PolarAccComplete.rawValue, body: ["message": "ACC Stream stopped"])
             return
         }
 
         isAccStreaming = true
+        startAccFlushTimer()
 
         accDisposable = requestStreamSettings(deviceId, feature: .acc)
             .flatMap { settings in
@@ -243,20 +372,27 @@ class PolarBridge: RCTEventEmitter, ObservableObject
                 onNext: { [weak self] accData in
                     guard let self = self else { return }
 
-                    for sample in accData.samples {
-                        NSLog("ACC x: \(sample.x) y: \(sample.y) z: \(sample.z) timestamp: \(sample.timeStamp)")
+                    self.accBufferQueue.async {
+                        for sample in accData.samples {
+                            NSLog("ACC x: \(sample.x) y: \(sample.y) z: \(sample.z) timestamp: \(sample.timeStamp)")
 
-                        var event: [String: Any] = [:]
-                        event["accX"] = sample.x
-                        event["accY"] = sample.y
-                        event["accZ"] = sample.z
-                        event["accTimestamp"] = Double(sample.timeStamp)  // RN doesn’t support int64
+                            var event: [String: Any] = [:]
+                            event["accX"] = sample.x
+                            event["accY"] = sample.y
+                            event["accZ"] = sample.z
+                            event["accTimestamp"] = Double(sample.timeStamp)  // RN doesn’t support int64
 
-                        self.sendEvent(withName: PolarEvent.PolarAccData.rawValue, body: event)
+                            self.accBuffer.append(event)
+//                             self.sendEvent(withName: PolarEvent.PolarAccData.rawValue, body: event)
+                        }
                     }
                 },
                 onError: { [weak self] error in
                     guard let self = self else { return }
+
+                    self.stopAccFlushTimer()
+                    self.flushAccBuffer()
+                    self.isAccStreaming = false
 
                     NSLog("PolarBridge: ACC stream failed: \(error.localizedDescription)")
 
@@ -269,6 +405,10 @@ class PolarBridge: RCTEventEmitter, ObservableObject
                 },
                 onCompleted: { [weak self] in
                     guard let self = self else { return }
+
+                    self.stopAccFlushTimer()
+                    self.flushAccBuffer()
+                    self.isAccStreaming = false
 
                     NSLog("PolarBridge: ACC stream complete")
 
@@ -284,6 +424,49 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         accDisposable?.disposed(by: disposeBag)
     }
 
+    private func startGyrFlushTimer() {
+        stopGyrFlushTimer()
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+
+            self.gyrFlushTimer = Timer(
+                timeInterval: self.sensorFlushInterval,
+                repeats: true
+            ) { [weak self] _ in
+                self?.flushGyrBuffer()
+            }
+
+            RunLoop.main.add(self.gyrFlushTimer!, forMode: .common)
+        }
+    }
+
+    private func stopGyrFlushTimer() {
+        DispatchQueue.main.async { [weak self] in
+            self?.gyrFlushTimer?.invalidate()
+            self?.gyrFlushTimer = nil
+        }
+    }
+
+    private func flushGyrBuffer() {
+        gyrBufferQueue.async { [weak self] in
+            guard let self = self else { return }
+            guard !self.gyrBuffer.isEmpty else { return }
+
+            let events = self.gyrBuffer
+            self.gyrBuffer.removeAll()
+
+            DispatchQueue.main.async {
+                for event in events {
+                    self.sendEvent(
+                        withName: PolarEvent.PolarGyrData.rawValue,
+                        body: event
+                    )
+                }
+            }
+        }
+    }
+
     @objc(fetchGyrData:)
     func fetchGyrData(_ deviceId: String) {
         NSLog("PolarBridge: Fetch Gyroscope Data called on: \(deviceId)")
@@ -295,12 +478,17 @@ class PolarBridge: RCTEventEmitter, ObservableObject
 
         if isGyrStreaming {
             disposeGyrStream()
+            stopGyrFlushTimer()
+            flushGyrBuffer()
+            isGyrStreaming = false
+
             NSLog("PolarBridge: GYR Stream stopped")
             sendEvent(withName: PolarEvent.PolarAccComplete.rawValue, body: ["message": "GYR Stream stopped"])
             return
         }
 
         isGyrStreaming = true
+        startGyrFlushTimer()
 
         gyrDisposable = requestStreamSettings(deviceId, feature: .gyro)
             .flatMap { settings in
@@ -311,27 +499,34 @@ class PolarBridge: RCTEventEmitter, ObservableObject
                 onNext: { [weak self] gyrData in
                     guard let self = self else { return }
 
-                    for sample in gyrData.samples {
-                        NSLog("GYR x: \(sample.x) y: \(sample.y) z: \(sample.z) timestamp: \(sample.timeStamp)")
+                    self.gyrBufferQueue.async {
+                        for sample in gyrData.samples {
+                            NSLog("GYR x: \(sample.x) y: \(sample.y) z: \(sample.z) timestamp: \(sample.timeStamp)")
 
-                        var event: [String: Any] = [:]
+                            var event: [String: Any] = [:]
 
-                        // JS does NOT support Float — convert to String
-                        event["gyrX"] = "\(sample.x)"
-                        event["gyrY"] = "\(sample.y)"
-                        event["gyrZ"] = "\(sample.z)"
+                            // JS does NOT support Float — convert to String
+                            event["gyrX"] = "\(sample.x)"
+                            event["gyrY"] = "\(sample.y)"
+                            event["gyrZ"] = "\(sample.z)"
 
-                        // JS does NOT support Int64 — convert to Double
-                        event["gyrTimestamp"] = Double(sample.timeStamp)
+                            // JS does NOT support Int64 — convert to Double
+                            event["gyrTimestamp"] = Double(sample.timeStamp)
 
-                        self.sendEvent(
-                            withName: PolarEvent.PolarGyrData.rawValue,
-                            body: event
-                        )
+                            self.gyrBuffer.append(event)
+//                             self.sendEvent(
+//                                 withName: PolarEvent.PolarGyrData.rawValue,
+//                                 body: event
+//                             )
+                        }
                     }
                 },
                 onError: { [weak self] error in
                     guard let self = self else { return }
+
+                    stopGyrFlushTimer()
+                    flushGyrBuffer()
+                    isGyrStreaming = false
 
                     NSLog("PolarBridge: GYR stream failed: \(error.localizedDescription)")
 
@@ -344,6 +539,10 @@ class PolarBridge: RCTEventEmitter, ObservableObject
                 },
                 onCompleted: { [weak self] in
                     guard let self = self else { return }
+
+                    stopGyrFlushTimer()
+                    flushGyrBuffer()
+                    isGyrStreaming = false
 
                     NSLog("PolarBridge: GYR stream complete")
 
@@ -359,6 +558,49 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         gyrDisposable?.disposed(by: disposeBag)
     }
 
+    private func startPpgFlushTimer() {
+        stopPpgFlushTimer()
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+
+            self.ppgFlushTimer = Timer(
+                timeInterval: self.sensorFlushInterval,
+                repeats: true
+            ) { [weak self] _ in
+                self?.flushPpgBuffer()
+            }
+
+            RunLoop.main.add(self.ppgFlushTimer!, forMode: .common)
+        }
+    }
+
+    private func stopPpgFlushTimer() {
+        DispatchQueue.main.async { [weak self] in
+            self?.ppgFlushTimer?.invalidate()
+            self?.ppgFlushTimer = nil
+        }
+    }
+
+    private func flushPpgBuffer() {
+        ppgBufferQueue.async { [weak self] in
+            guard let self = self else { return }
+            guard !self.ppgBuffer.isEmpty else { return }
+
+            let events = self.ppgBuffer
+            self.ppgBuffer.removeAll()
+
+            DispatchQueue.main.async {
+                for event in events {
+                    self.sendEvent(
+                        withName: PolarEvent.PolarPpgData.rawValue,
+                        body: event
+                    )
+                }
+            }
+        }
+    }
+
     @objc(fetchPpgData:)
     func fetchPpgData(_ deviceId: String) {
         NSLog("PolarBridge: Fetch PPG Data called on: \(deviceId)")
@@ -370,13 +612,17 @@ class PolarBridge: RCTEventEmitter, ObservableObject
 
         if isPpgStreaming {
             disposePpgStream()
+            stopPpgFlushTimer()
+            flushPpgBuffer()
+            isPpgStreaming = false
+
             NSLog("PolarBridge: PPG Stream stopped")
             sendEvent(withName: PolarEvent.PolarAccComplete.rawValue, body: ["message": "PPG Stream stopped"])
             return
         }
 
         isPpgStreaming = true
-
+        startPpgFlushTimer()
 
         ppgDisposable = requestStreamSettings(deviceId, feature: .ppg)
             .flatMap { settings in
@@ -389,30 +635,37 @@ class PolarBridge: RCTEventEmitter, ObservableObject
 
                     // Only handle PPG3_AMBIENT1 type (just like Kotlin)
                     if ppgData.type == PpgDataType.ppg3_ambient1 {
-                        for sample in ppgData.samples {
+                        self.ppgBufferQueue.async {
+                            for sample in ppgData.samples {
 
-                            NSLog("PPG ppg0: \(sample.channelSamples[0]) ppg1: \(sample.channelSamples[1]) ppg2: \(sample.channelSamples[2]) ambient: \(sample.channelSamples[3]) ts: \(sample.timeStamp)")
+                                NSLog("PPG ppg0: \(sample.channelSamples[0]) ppg1: \(sample.channelSamples[1]) ppg2: \(sample.channelSamples[2]) ambient: \(sample.channelSamples[3]) ts: \(sample.timeStamp)")
 
-                            var event: [String: Any] = [:]
+                                var event: [String: Any] = [:]
 
-                            // Float → String (React Native cannot handle Float)
-                            event["ppg0"] = "\(sample.channelSamples[0])"
-                            event["ppg1"] = "\(sample.channelSamples[1])"
-                            event["ppg2"] = "\(sample.channelSamples[2])"
-                            event["ambient"] = "\(sample.channelSamples[3])"
+                                // Float → String (React Native cannot handle Float)
+                                event["ppg0"] = "\(sample.channelSamples[0])"
+                                event["ppg1"] = "\(sample.channelSamples[1])"
+                                event["ppg2"] = "\(sample.channelSamples[2])"
+                                event["ambient"] = "\(sample.channelSamples[3])"
 
-                            // Int64 timestamp → Double
-                            event["ppgTimestamp"] = Double(sample.timeStamp)
+                                // Int64 timestamp → Double
+                                event["ppgTimestamp"] = Double(sample.timeStamp)
 
-                            self.sendEvent(
-                                withName: PolarEvent.PolarPpgData.rawValue,
-                                body: event
-                            )
+                                self.ppgBuffer.append(event)
+//                                 self.sendEvent(
+//                                     withName: PolarEvent.PolarPpgData.rawValue,
+//                                     body: event
+//                                 )
+                            }
                         }
                     }
                 },
                 onError: { [weak self] error in
                     guard let self = self else { return }
+
+                    self.stopPpgFlushTimer()
+                    self.flushPpgBuffer()
+                    self.isPpgStreaming = false
 
                     NSLog("PolarBridge: PPG stream failed: \(error.localizedDescription)")
 
@@ -425,6 +678,10 @@ class PolarBridge: RCTEventEmitter, ObservableObject
                 },
                 onCompleted: { [weak self] in
                     guard let self = self else { return }
+
+                    self.stopPpgFlushTimer()
+                    self.flushPpgBuffer()
+                    self.isPpgStreaming = false
 
                     NSLog("PolarBridge: PPG stream complete")
 
