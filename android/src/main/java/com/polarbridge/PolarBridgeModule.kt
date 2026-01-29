@@ -17,12 +17,14 @@ import io.reactivex.rxjava3.core.Flowable
 import io.reactivex.rxjava3.core.Single
 import java.util.*
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.TimeUnit
 import java.time.Instant
 
 @ReactModule(name = PolarBridgeModule.NAME)
 class PolarBridgeModule(reactContext: ReactApplicationContext) :
   NativePolarBridgeSpec(reactContext) {
   private val reactContext: ReactApplicationContext = reactContext
+  private val SENSOR_BUFFER_SECONDS = 10L
 
   override fun getName(): String {
     return NAME
@@ -617,17 +619,34 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  data class HrSampleWithTimestamp(
+    val data: PolarHrData.PolarHrSample,
+    val timestampMs: Long
+  )
+
   override fun fetchHrData(deviceId: String) {
     Log.e(TAG, "Fetch Heart Data called on: $deviceId ")
     val isDisposed = hrDisposable?.isDisposed ?: true
     try{
       if (isDisposed) {
         hrDisposable = api.startHrStreaming(deviceId)
+          .flatMapIterable { hrData ->
+            hrData.samples.map { sample ->
+              HrSampleWithTimestamp(
+                data = sample,
+                timestampMs = System.currentTimeMillis()
+              )
+            }
+          }
+          .buffer(SENSOR_BUFFER_SECONDS, TimeUnit.SECONDS)
           .observeOn(AndroidSchedulers.mainThread())
           .subscribe(
-            { hrData: PolarHrData ->
-              Log.i(TAG, "PolarHrData ${hrData.samples.size}")
-              for (sample in hrData.samples) {
+            { samples ->
+              if (samples.isEmpty()) return@subscribe
+
+              Log.d(TAG, "Flushing HR buffer (${samples.size} samples)")
+              for (item in samples) {
+                val sample = item.data
                 Log.d(TAG, "HR     bpm: ${sample.hr} " +
                   "rrs: ${sample.rrsMs} " +
                   "rrAvailable: ${sample.rrAvailable} " +
@@ -645,6 +664,7 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
                 event.putBoolean("rrAvailable", sample.rrAvailable)
                 event.putBoolean("contactStatus", sample.contactStatus)
                 event.putBoolean("contactStatusSupported", sample.contactStatusSupported)
+                event.putDouble("timestamp", item.timestampMs.toDouble())
 
                 sendEvent("PolarHrData", event)
               }
@@ -719,10 +739,15 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
           .flatMap { settings: PolarSensorSetting ->
             api.startAccStreaming(deviceId, settings)
           }
+          .flatMapIterable { it.samples }
+          .buffer(SENSOR_BUFFER_SECONDS, TimeUnit.SECONDS)
           .observeOn(AndroidSchedulers.mainThread())
           .subscribe(
-            { polarAccelerometerData: PolarAccelerometerData ->
-              for (data in polarAccelerometerData.samples) {
+            { samples ->
+              if (samples.isEmpty()) return@subscribe
+              Log.d(TAG, "Flushing ACC buffer (${samples.size} samples)")
+
+              for (data in samples) {
                 Log.d(TAG, "ACC    x: ${data.x} y: ${data.y} z: ${data.z} timeStamp: ${data.timeStamp}")
 
                 val event: WritableMap = Arguments.createMap()
@@ -770,10 +795,16 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
           .flatMap { settings: PolarSensorSetting ->
             api.startGyroStreaming(deviceId, settings)
           }
+          .flatMapIterable { it.samples }
+          .buffer(SENSOR_BUFFER_SECONDS, TimeUnit.SECONDS)
           .observeOn(AndroidSchedulers.mainThread())
           .subscribe(
-            { polarGyroData: PolarGyroData ->
-              for (data in polarGyroData.samples) {
+            { samples ->
+              if (samples.isEmpty()) return@subscribe
+
+              Log.d(TAG, "Flushing GYR buffer (${samples.size} samples)")
+
+              for (data in samples) {
                 Log.d(TAG, "GYR    x: ${data.x} y: ${data.y} z: ${data.z} timeStamp: ${data.timeStamp}")
 
                 val event: WritableMap = Arguments.createMap()
@@ -822,25 +853,31 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
           .flatMap { settings: PolarSensorSetting ->
             api.startPpgStreaming(deviceId, settings)
           }
+          .filter { it.type == PolarPpgData.PpgDataType.PPG3_AMBIENT1 }
+          .flatMapIterable { it.samples }
+          .buffer(SENSOR_BUFFER_SECONDS, TimeUnit.SECONDS)
+          .observeOn(AndroidSchedulers.mainThread())
           .subscribe(
-            { polarPpgData: PolarPpgData ->
-              if (polarPpgData.type == PolarPpgData.PpgDataType.PPG3_AMBIENT1) {
-                for (data in polarPpgData.samples) {
-                  Log.d(TAG, "PPG    ppg0: ${data.channelSamples[0]} ppg1: ${data.channelSamples[1]} ppg2: ${data.channelSamples[2]} ambient: ${data.channelSamples[3]} timeStamp: ${data.timeStamp}")
+            { samples ->
+              if (samples.isEmpty()) return@subscribe
 
-                  val event: WritableMap = Arguments.createMap()
-                  // Float not supported
-                  // See: https://github.com/facebook/react-native/issues/9685
-                  // See: https://javadoc.io/doc/com.facebook.react/react-native/0.20.1/com/facebook/react/bridge/WritableMap.html
-                  event.putString("ppg0", "${data.channelSamples[0]}")
-                  event.putString("ppg1", "${data.channelSamples[1]}")
-                  event.putString("ppg2", "${data.channelSamples[2]}")
-                  event.putString("ambient", "${data.channelSamples[3]}")
-                  // Long not supported, use double as workaround
-                  event.putDouble("ppgTimestamp", data.timeStamp.toDouble())
+              Log.d(TAG, "Flushing PPG buffer (${samples.size} samples)")
 
-                  sendEvent("PolarPpgData", event)
-                }
+              for (data in samples) {
+                Log.d(TAG, "PPG    ppg0: ${data.channelSamples[0]} ppg1: ${data.channelSamples[1]} ppg2: ${data.channelSamples[2]} ambient: ${data.channelSamples[3]} timeStamp: ${data.timeStamp}")
+
+                val event: WritableMap = Arguments.createMap()
+                // Float not supported
+                // See: https://github.com/facebook/react-native/issues/9685
+                // See: https://javadoc.io/doc/com.facebook.react/react-native/0.20.1/com/facebook/react/bridge/WritableMap.html
+                event.putString("ppg0", "${data.channelSamples[0]}")
+                event.putString("ppg1", "${data.channelSamples[1]}")
+                event.putString("ppg2", "${data.channelSamples[2]}")
+                event.putString("ambient", "${data.channelSamples[3]}")
+                // Long not supported, use double as workaround
+                event.putDouble("ppgTimestamp", data.timeStamp.toDouble())
+
+                sendEvent("PolarPpgData", event)
               }
             },
             { error: Throwable ->
