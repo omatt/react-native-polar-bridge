@@ -156,7 +156,7 @@ export default function App() {
       (data: HrData) => {
         // console.log('Received HR data:', data);
         console.log(
-          'Heart Rate:',
+          'Heart Rate:', `Polar device ${deviceId}`,
           `${data.hr} bpm timestamp: ${formatDateYYYYMMDDHHMMSS(data.timestamp)}`
         );
         if(isLogCSVEnabled) {
@@ -197,7 +197,7 @@ export default function App() {
       emittedEventId.POLAR_ACC_DATA,
       (data: AccData) => {
         console.log(
-          'ACC Stream:',
+          'ACC Stream:', `Polar device ${deviceId}`,
           `x: ${data.accX} y: ${data.accY} z: ${data.accZ} timestamp: ${formatPolarTimestamp(data.accTimestamp)}`
         );
         if(isLogCSVEnabled) {
@@ -238,7 +238,7 @@ export default function App() {
       emittedEventId.POLAR_GYR_DATA,
       (data: GyrData) => {
         console.log(
-          'GYR Stream:',
+          'GYR Stream:', `Polar device ${deviceId}`,
           `x: ${data.gyrX} y: ${data.gyrY} z: ${data.gyrZ} timestamp: ${formatPolarTimestamp(data.gyrTimestamp)}`
         );
         if(isLogCSVEnabled){
@@ -279,7 +279,7 @@ export default function App() {
       emittedEventId.POLAR_PPG_DATA,
       (data: PpgData) => {
         console.log(
-          'PPG Stream:',
+          'PPG Stream:', `Polar device ${deviceId}`,
           `ppg0: ${data.ppg0} ppg1: ${data.ppg1} ppg2: ${data.ppg2} ambient: ${data.ambient} timestamp: ${formatPolarTimestamp(data.ppgTimestamp)}`
         );
         if(isLogCSVEnabled) {
@@ -356,10 +356,17 @@ export default function App() {
   //   disconnectFromDevice(deviceId);
   // };
 
+  const BUFFER_MS = 5_000;
+
   const handleFetchHrData = () => {
     if (connectedDeviceId != null) {
       toggleHRStreamStatus();
+      /**
+       * bufferMs is an optional parameter. When not set, the package sends
+       * the sensor data from the Polar device every 10 seconds by default.
+       */
       fetchHrData(connectedDeviceId);
+      // fetchHrData(connectedDeviceId, BUFFER_MS);
     } else {
       displayDialogNoConnectedDevice();
     }
@@ -368,7 +375,7 @@ export default function App() {
   const handleFetchAccData = () => {
     if (connectedDeviceId != null) {
       toggleAccStreamStatus();
-      fetchAccData(connectedDeviceId);
+      fetchAccData(connectedDeviceId, BUFFER_MS);
     } else {
       displayDialogNoConnectedDevice();
     }
@@ -377,7 +384,7 @@ export default function App() {
   const handleFetchGyrData = () => {
     if (connectedDeviceId != null) {
       toggleGyrStreamStatus();
-      fetchGyrData(connectedDeviceId);
+      fetchGyrData(connectedDeviceId, BUFFER_MS);
     } else {
       displayDialogNoConnectedDevice();
     }
@@ -386,7 +393,7 @@ export default function App() {
   const handleFetchPpgData = () => {
     if (connectedDeviceId != null) {
       togglePpgStreamStatus();
-      fetchPpgData(connectedDeviceId);
+      fetchPpgData(connectedDeviceId, BUFFER_MS);
     } else {
       displayDialogNoConnectedDevice();
     }

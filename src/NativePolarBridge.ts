@@ -6,10 +6,10 @@ export interface Spec extends TurboModule {
   multiply(a: number, b: number): number;
   connectToDevice(deviceId: string): Promise<DeviceConnected>;
   disconnectFromDevice(deviceId: string): void;
-  fetchHrData(deviceId: string): void;
-  fetchAccData(deviceId: string): void;
-  fetchGyrData(deviceId: string): void;
-  fetchPpgData(deviceId: string): void;
+  fetchHrData(deviceId: string, bufferMs: number | null): void;
+  fetchAccData(deviceId: string, bufferMs: number | null): void;
+  fetchGyrData(deviceId: string, bufferMs: number | null): void;
+  fetchPpgData(deviceId: string, bufferMs: number | null): void;
   enableSdkMode(deviceId: string): void;
   disableSdkMode(deviceId: string): void;
   getDeviceTime(deviceId: string): Promise<DeviceTime>;

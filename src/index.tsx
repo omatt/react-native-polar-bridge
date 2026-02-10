@@ -16,20 +16,20 @@ export function scanDevices() {
   return PolarBridge.scanDevices();
 }
 
-export function fetchHrData(deviceId: string) {
-  return PolarBridge.fetchHrData(deviceId);
+export function fetchHrData(deviceId: string, bufferMs: number | null = null) {
+  return PolarBridge.fetchHrData(deviceId, bufferMs);
 }
 
-export function fetchAccData(deviceId: string) {
-  return PolarBridge.fetchAccData(deviceId);
+export function fetchAccData(deviceId: string, bufferMs: number | null = null) {
+  return PolarBridge.fetchAccData(deviceId, bufferMs);
 }
 
-export function fetchGyrData(deviceId: string) {
-  return PolarBridge.fetchGyrData(deviceId);
+export function fetchGyrData(deviceId: string, bufferMs: number | null = null) {
+  return PolarBridge.fetchGyrData(deviceId, bufferMs);
 }
 
-export function fetchPpgData(deviceId: string) {
-  return PolarBridge.fetchPpgData(deviceId);
+export function fetchPpgData(deviceId: string, bufferMs: number | null = null) {
+  return PolarBridge.fetchPpgData(deviceId, bufferMs);
 }
 
 export function enableSdkMode(deviceId: string) {

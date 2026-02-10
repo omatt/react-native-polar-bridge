@@ -46,8 +46,8 @@ class PolarBridge: RCTEventEmitter, ObservableObject
     private var isPpgStreaming = false
     private let disposeBag = DisposeBag()
 
-    /// Flush interval for all sensor buffers (seconds)
-    private let sensorFlushInterval: TimeInterval = 10.0
+    /// Flush interval for all sensor buffers (milliseconds)
+    private let SENSOR_BUFFER_MS: TimeInterval = 10_000
 
     @objc
     func multiply(_ a: NSNumber,withB b: NSNumber) -> NSNumber {
@@ -165,14 +165,13 @@ class PolarBridge: RCTEventEmitter, ObservableObject
     private let hrBufferQueue = DispatchQueue(label: "com.polarbridge.hrBufferQueue")
     private var hrFlushTimer: Timer?
 
-    private func startHrFlushTimer() {
+    private func startHrFlushTimer(bufferMs: TimeInterval) {
         stopHrFlushTimer()
-
+        let intervalSeconds = bufferMs / 1000.0   // Timer always uses seconds,
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-
             self.hrFlushTimer = Timer(
-                timeInterval: self.sensorFlushInterval,
+                timeInterval: intervalSeconds,
                 repeats: true
             ) { [weak self] _ in
                 self?.flushHrBuffer()
@@ -208,10 +207,13 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         }
     }
 
-    @objc(fetchHrData:)
-    func fetchHrData(_ deviceId: String) {
+    @objc(fetchHrData:bufferMs:)
+    func fetchHrData(_ deviceId: String, bufferMs: NSNumber?) {
         NSLog("PolarBridge: Fetch HR Data called on: \(deviceId)")
-
+        // fallback
+        let resolvedBufferMs: TimeInterval = (bufferMs?.doubleValue ?? -1) >= 0
+                                                     ? bufferMs!.doubleValue
+                                                     : SENSOR_BUFFER_MS
         guard let api = api else {
             NSLog("PolarBridge: Polar API not initialized")
             return
@@ -230,7 +232,7 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         }
 
         isHrStreaming = true
-        startHrFlushTimer()
+        startHrFlushTimer(bufferMs: resolvedBufferMs)
 
         // Start HR streaming
         hrDisposable = api.startHrStreaming(deviceId)
@@ -296,14 +298,14 @@ class PolarBridge: RCTEventEmitter, ObservableObject
     private let ppgBufferQueue = DispatchQueue(label: "com.polarbridge.ppgBufferQueue")
     private var ppgFlushTimer: Timer?
 
-    private func startAccFlushTimer() {
+    private func startAccFlushTimer(bufferMs: TimeInterval) {
         stopAccFlushTimer()
-
+        let intervalSeconds = bufferMs / 1000.0
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
 
             self.accFlushTimer = Timer(
-                timeInterval: self.sensorFlushInterval,
+                timeInterval: intervalSeconds,
                 repeats: true
             ) { [weak self] _ in
                 self?.flushAccBuffer()
@@ -339,10 +341,12 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         }
     }
 
-    @objc(fetchAccData:)
-    func fetchAccData(_ deviceId: String) {
+    @objc(fetchAccData:bufferMs:)
+    func fetchAccData(_ deviceId: String, bufferMs: NSNumber?) {
         NSLog("PolarBridge: Fetch ACC Data called on: \(deviceId)")
-
+        let resolvedBufferMs: TimeInterval = (bufferMs?.doubleValue ?? -1) >= 0
+                                                             ? bufferMs!.doubleValue
+                                                             : SENSOR_BUFFER_MS
         guard let api = api else {
             NSLog("PolarBridge: Polar API not initialized")
             return
@@ -361,7 +365,7 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         }
 
         isAccStreaming = true
-        startAccFlushTimer()
+        startAccFlushTimer(bufferMs: resolvedBufferMs)
 
         accDisposable = requestStreamSettings(deviceId, feature: .acc)
             .flatMap { settings in
@@ -424,14 +428,14 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         accDisposable?.disposed(by: disposeBag)
     }
 
-    private func startGyrFlushTimer() {
+    private func startGyrFlushTimer(bufferMs: TimeInterval) {
         stopGyrFlushTimer()
-
+        let intervalSeconds = bufferMs / 1000.0
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
 
             self.gyrFlushTimer = Timer(
-                timeInterval: self.sensorFlushInterval,
+                timeInterval: intervalSeconds,
                 repeats: true
             ) { [weak self] _ in
                 self?.flushGyrBuffer()
@@ -467,10 +471,12 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         }
     }
 
-    @objc(fetchGyrData:)
-    func fetchGyrData(_ deviceId: String) {
+    @objc(fetchGyrData:bufferMs:)
+    func fetchGyrData(_ deviceId: String, bufferMs: NSNumber?) {
         NSLog("PolarBridge: Fetch Gyroscope Data called on: \(deviceId)")
-
+        let resolvedBufferMs: TimeInterval = (bufferMs?.doubleValue ?? -1) >= 0
+                                                             ? bufferMs!.doubleValue
+                                                             : SENSOR_BUFFER_MS
         guard let api = api else {
             NSLog("PolarBridge: Polar API not initialized")
             return
@@ -488,7 +494,7 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         }
 
         isGyrStreaming = true
-        startGyrFlushTimer()
+        startGyrFlushTimer(bufferMs: resolvedBufferMs)
 
         gyrDisposable = requestStreamSettings(deviceId, feature: .gyro)
             .flatMap { settings in
@@ -558,14 +564,14 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         gyrDisposable?.disposed(by: disposeBag)
     }
 
-    private func startPpgFlushTimer() {
+    private func startPpgFlushTimer(bufferMs: TimeInterval) {
         stopPpgFlushTimer()
-
+        let intervalSeconds = bufferMs / 1000.0
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
 
             self.ppgFlushTimer = Timer(
-                timeInterval: self.sensorFlushInterval,
+                timeInterval: intervalSeconds,
                 repeats: true
             ) { [weak self] _ in
                 self?.flushPpgBuffer()
@@ -601,10 +607,12 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         }
     }
 
-    @objc(fetchPpgData:)
-    func fetchPpgData(_ deviceId: String) {
+    @objc(fetchPpgData:bufferMs:)
+    func fetchPpgData(_ deviceId: String, bufferMs: NSNumber?) {
         NSLog("PolarBridge: Fetch PPG Data called on: \(deviceId)")
-
+        let resolvedBufferMs: TimeInterval = (bufferMs?.doubleValue ?? -1) >= 0
+                                                             ? bufferMs!.doubleValue
+                                                             : SENSOR_BUFFER_MS
         guard let api = api else {
             NSLog("PolarBridge: Polar API not initialized")
             return
@@ -622,7 +630,7 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         }
 
         isPpgStreaming = true
-        startPpgFlushTimer()
+        startPpgFlushTimer(bufferMs: resolvedBufferMs)
 
         ppgDisposable = requestStreamSettings(deviceId, feature: .ppg)
             .flatMap { settings in

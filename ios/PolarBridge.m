@@ -11,13 +11,13 @@ RCT_EXTERN_METHOD(connectToDevice:(NSString *)deviceId
 
 RCT_EXTERN_METHOD(disconnectFromDevice:(NSString *)deviceId)
 RCT_EXTERN_METHOD(scanDevices)
-RCT_EXTERN_METHOD(fetchHrData:(NSString *)deviceId)
+RCT_EXTERN_METHOD(fetchHrData:(NSString *)deviceId bufferMs:(nullable NSNumber *)bufferMs)
 RCT_EXTERN_METHOD(disposeHrStream)
-RCT_EXTERN_METHOD(fetchAccData:(NSString *)deviceId)
+RCT_EXTERN_METHOD(fetchAccData:(NSString *)deviceId bufferMs:(nullable NSNumber *)bufferMs)
 RCT_EXTERN_METHOD(disposeAccStream)
-RCT_EXTERN_METHOD(fetchGyrData:(NSString *)deviceId)
+RCT_EXTERN_METHOD(fetchGyrData:(NSString *)deviceId bufferMs:(nullable NSNumber *)bufferMs)
 RCT_EXTERN_METHOD(disposeGyrStream)
-RCT_EXTERN_METHOD(fetchPpgData:(NSString *)deviceId)
+RCT_EXTERN_METHOD(fetchPpgData:(NSString *)deviceId bufferMs:(nullable NSNumber *)bufferMs)
 RCT_EXTERN_METHOD(disposePpgStream)
 RCT_EXTERN_METHOD(setDeviceTime:(NSString *)deviceId)
 RCT_EXTERN_METHOD(getDeviceTime:(NSString *)deviceId

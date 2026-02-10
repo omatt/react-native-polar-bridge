@@ -24,7 +24,7 @@ import java.time.Instant
 class PolarBridgeModule(reactContext: ReactApplicationContext) :
   NativePolarBridgeSpec(reactContext) {
   private val reactContext: ReactApplicationContext = reactContext
-  private val SENSOR_BUFFER_SECONDS = 10L
+  private val SENSOR_BUFFER_MS = 10_000L
 
   override fun getName(): String {
     return NAME
@@ -624,8 +624,9 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
     val timestampMs: Long
   )
 
-  override fun fetchHrData(deviceId: String) {
+  override fun fetchHrData(deviceId: String, ms: Double?) {
     Log.e(TAG, "Fetch Heart Data called on: $deviceId ")
+    val bufferMs = ms?.toLong()?.takeIf { it >= 0 } ?: SENSOR_BUFFER_MS
     val isDisposed = hrDisposable?.isDisposed ?: true
     try{
       if (isDisposed) {
@@ -638,7 +639,7 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
               )
             }
           }
-          .buffer(SENSOR_BUFFER_SECONDS, TimeUnit.SECONDS)
+          .buffer(bufferMs, TimeUnit.MILLISECONDS)
           .observeOn(AndroidSchedulers.mainThread())
           .subscribe(
             { samples ->
@@ -730,8 +731,9 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
       }
   }
 
-  override fun fetchAccData(deviceId: String) {
+  override fun fetchAccData(deviceId: String, ms: Double?) {
     Log.e(TAG, "Fetch Accelerometer Data called on: $deviceId ")
+    val bufferMs = ms?.toLong()?.takeIf { it >= 0 } ?: SENSOR_BUFFER_MS
     val isDisposed = accDisposable?.isDisposed ?: true
     try{
       if (isDisposed) {
@@ -740,7 +742,7 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
             api.startAccStreaming(deviceId, settings)
           }
           .flatMapIterable { it.samples }
-          .buffer(SENSOR_BUFFER_SECONDS, TimeUnit.SECONDS)
+          .buffer(bufferMs, TimeUnit.MILLISECONDS)
           .observeOn(AndroidSchedulers.mainThread())
           .subscribe(
             { samples ->
@@ -786,8 +788,9 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  override fun fetchGyrData(deviceId: String) {
+  override fun fetchGyrData(deviceId: String, ms: Double?) {
     Log.e(TAG, "Fetch Gyroscope Data called on: $deviceId ")
+    val bufferMs = ms?.toLong()?.takeIf { it >= 0 } ?: SENSOR_BUFFER_MS
     val isDisposed = gyrDisposable?.isDisposed ?: true
     try {
       if (isDisposed) {
@@ -796,7 +799,7 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
             api.startGyroStreaming(deviceId, settings)
           }
           .flatMapIterable { it.samples }
-          .buffer(SENSOR_BUFFER_SECONDS, TimeUnit.SECONDS)
+          .buffer(bufferMs, TimeUnit.MILLISECONDS)
           .observeOn(AndroidSchedulers.mainThread())
           .subscribe(
             { samples ->
@@ -844,8 +847,9 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  override fun fetchPpgData(deviceId: String) {
+  override fun fetchPpgData(deviceId: String, ms: Double?) {
     Log.e(TAG, "Fetch Photoplethysmograph Data called on: $deviceId ")
+    val bufferMs = ms?.toLong()?.takeIf { it >= 0 } ?: SENSOR_BUFFER_MS
     val isDisposed = ppgDisposable?.isDisposed ?: true
     try {
       if (isDisposed) {
@@ -855,7 +859,7 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
           }
           .filter { it.type == PolarPpgData.PpgDataType.PPG3_AMBIENT1 }
           .flatMapIterable { it.samples }
-          .buffer(SENSOR_BUFFER_SECONDS, TimeUnit.SECONDS)
+          .buffer(bufferMs, TimeUnit.MILLISECONDS)
           .observeOn(AndroidSchedulers.mainThread())
           .subscribe(
             { samples ->
