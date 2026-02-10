@@ -113,6 +113,14 @@ Ensure that the `deviceId` of the Polar device is connected before calling the f
 fetchHrData(connectedDeviceId);
 ```
 
+By default, the package sends sensor data reports every 10 seconds. The interval
+can be customized by specifying the frequency (in milliseconds) in the fetch request.
+
+```js
+const BUFFER_MS = 5_000;
+fetchHrData(connectedDeviceId, BUFFER_MS);
+```
+
 Listen for emitted events of the HR data.
 
 ```js
