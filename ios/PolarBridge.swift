@@ -369,7 +369,7 @@ class PolarBridge: RCTEventEmitter, ObservableObject
 
         accDisposable = requestStreamSettings(deviceId, feature: .acc)
             .flatMap { settings in
-                api.startAccStreaming(deviceId, settings: settings)
+                api.startAccStreaming(deviceId, settings: settings).asObservable()
             }
             .observe(on: MainScheduler.instance)
             .subscribe(
@@ -377,7 +377,7 @@ class PolarBridge: RCTEventEmitter, ObservableObject
                     guard let self = self else { return }
 
                     self.accBufferQueue.async {
-                        for sample in accData.samples {
+                        for sample in accData {
                             NSLog("ACC x: \(sample.x) y: \(sample.y) z: \(sample.z) timestamp: \(sample.timeStamp)")
 
                             var event: [String: Any] = [:]
@@ -506,7 +506,7 @@ class PolarBridge: RCTEventEmitter, ObservableObject
                     guard let self = self else { return }
 
                     self.gyrBufferQueue.async {
-                        for sample in gyrData.samples {
+                        for sample in gyrData {
                             NSLog("GYR x: \(sample.x) y: \(sample.y) z: \(sample.z) timestamp: \(sample.timeStamp)")
 
                             var event: [String: Any] = [:]
@@ -956,5 +956,9 @@ extension PolarBridge: PolarBleApiDeviceInfoObserver {
         deviceConnected = true
         batteryReceived = true
         maybeResolve()
+    }
+
+    func batteryChargingStatusReceived(_ identifier: String, chargingStatus: BleBasClient.ChargeState) {
+        NSLog("Polar: Battery Charging status for \(identifier): \(chargingStatus)")
     }
 }
