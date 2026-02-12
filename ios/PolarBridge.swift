@@ -209,10 +209,14 @@ class PolarBridge: RCTEventEmitter, ObservableObject
 
     @objc(fetchHrData:bufferMs:)
     func fetchHrData(_ deviceId: String, bufferMs: NSNumber?) {
-        NSLog("PolarBridge: Fetch HR Data called on: \(deviceId)")
-        let resolvedBufferMs: TimeInterval = ((bufferMs as? NSNumber)?.doubleValue ?? -1) >= 0
-                                                     ? bufferMs!.doubleValue
-                                                     : SENSOR_BUFFER_MS
+        NSLog("PolarBridge: Fetch HR Data called on: \(deviceId) bufferMs: \(bufferMs)")
+        let resolvedBufferMs: TimeInterval
+
+        if let number = bufferMs, !(number is NSNull) {
+           resolvedBufferMs = number.doubleValue >= 0 ? number.doubleValue : SENSOR_BUFFER_MS
+        } else {
+           resolvedBufferMs = SENSOR_BUFFER_MS
+        }
         guard let api = api else {
             NSLog("PolarBridge: Polar API not initialized")
             return
@@ -342,10 +346,14 @@ class PolarBridge: RCTEventEmitter, ObservableObject
 
     @objc(fetchAccData:bufferMs:)
     func fetchAccData(_ deviceId: String, bufferMs: NSNumber?) {
-        NSLog("PolarBridge: Fetch ACC Data called on: \(deviceId)")
-        let resolvedBufferMs: TimeInterval = ((bufferMs as? NSNumber)?.doubleValue ?? -1) >= 0
-                                                             ? bufferMs!.doubleValue
-                                                             : SENSOR_BUFFER_MS
+        NSLog("PolarBridge: Fetch ACC Data called on: \(deviceId) bufferMs: \(bufferMs)")
+        let resolvedBufferMs: TimeInterval
+
+        if let number = bufferMs, !(number is NSNull) {
+          resolvedBufferMs = number.doubleValue >= 0 ? number.doubleValue : SENSOR_BUFFER_MS
+        } else {
+          resolvedBufferMs = SENSOR_BUFFER_MS
+        }
         guard let api = api else {
             NSLog("PolarBridge: Polar API not initialized")
             return
@@ -472,10 +480,14 @@ class PolarBridge: RCTEventEmitter, ObservableObject
 
     @objc(fetchGyrData:bufferMs:)
     func fetchGyrData(_ deviceId: String, bufferMs: NSNumber?) {
-        NSLog("PolarBridge: Fetch Gyroscope Data called on: \(deviceId)")
-        let resolvedBufferMs: TimeInterval = ((bufferMs as? NSNumber)?.doubleValue ?? -1) >= 0
-                                                             ? bufferMs!.doubleValue
-                                                             : SENSOR_BUFFER_MS
+        NSLog("PolarBridge: Fetch Gyroscope Data called on: \(deviceId) bufferMs: \(bufferMs)")
+        let resolvedBufferMs: TimeInterval
+
+        if let number = bufferMs, !(number is NSNull) {
+          resolvedBufferMs = number.doubleValue >= 0 ? number.doubleValue : SENSOR_BUFFER_MS
+        } else {
+          resolvedBufferMs = SENSOR_BUFFER_MS
+        }
         guard let api = api else {
             NSLog("PolarBridge: Polar API not initialized")
             return
@@ -608,10 +620,14 @@ class PolarBridge: RCTEventEmitter, ObservableObject
 
     @objc(fetchPpgData:bufferMs:)
     func fetchPpgData(_ deviceId: String, bufferMs: NSNumber?) {
-        NSLog("PolarBridge: Fetch PPG Data called on: \(deviceId)")
-        let resolvedBufferMs: TimeInterval = ((bufferMs as? NSNumber)?.doubleValue ?? -1) >= 0
-                                                             ? bufferMs!.doubleValue
-                                                             : SENSOR_BUFFER_MS
+        NSLog("PolarBridge: Fetch PPG Data called on: \(deviceId) bufferMs: \(bufferMs)")
+        let resolvedBufferMs: TimeInterval
+
+        if let number = bufferMs, !(number is NSNull) {
+          resolvedBufferMs = number.doubleValue >= 0 ? number.doubleValue : SENSOR_BUFFER_MS
+        } else {
+          resolvedBufferMs = SENSOR_BUFFER_MS
+        }
         guard let api = api else {
             NSLog("PolarBridge: Polar API not initialized")
             return
