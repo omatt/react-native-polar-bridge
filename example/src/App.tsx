@@ -375,7 +375,7 @@ export default function App() {
   const handleFetchAccData = () => {
     if (connectedDeviceId != null) {
       toggleAccStreamStatus();
-      fetchAccData(connectedDeviceId, BUFFER_MS);
+      fetchAccData(connectedDeviceId, null);
     } else {
       displayDialogNoConnectedDevice();
     }
