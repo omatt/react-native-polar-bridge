@@ -375,7 +375,7 @@ export default function App() {
   const handleFetchAccData = () => {
     if (connectedDeviceId != null) {
       toggleAccStreamStatus();
-      fetchAccData(connectedDeviceId, null);
+      fetchAccData(connectedDeviceId, null);  // null falls back to default
     } else {
       displayDialogNoConnectedDevice();
     }
@@ -384,7 +384,7 @@ export default function App() {
   const handleFetchGyrData = () => {
     if (connectedDeviceId != null) {
       toggleGyrStreamStatus();
-      fetchGyrData(connectedDeviceId, BUFFER_MS);
+      fetchGyrData(connectedDeviceId, -1);  // negative value falls back to default
     } else {
       displayDialogNoConnectedDevice();
     }

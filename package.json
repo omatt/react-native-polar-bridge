@@ -1,6 +1,6 @@
 {
   "name": "react-native-polar-bridge",
-  "version": "0.2.5",
+  "version": "0.2.8",
   "description": "Polar SDK for React Native",
   "source": "./src/index.tsx",
   "main": "./lib/module/index.js",

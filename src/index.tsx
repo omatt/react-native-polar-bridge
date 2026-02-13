@@ -17,19 +17,25 @@ export function scanDevices() {
 }
 
 export function fetchHrData(deviceId: string, bufferMs: number | null = null) {
-  return PolarBridge.fetchHrData(deviceId, bufferMs);
+  // If bufferMs is null or undefined, set it to -1
+  // Workaround to handle null/optional bufferMs
+  const safeBufferMs = bufferMs ?? -1;
+  return PolarBridge.fetchHrData(deviceId, safeBufferMs);
 }
 
 export function fetchAccData(deviceId: string, bufferMs: number | null = null) {
-  return PolarBridge.fetchAccData(deviceId, bufferMs);
+  const safeBufferMs = bufferMs ?? -1;
+  return PolarBridge.fetchAccData(deviceId, safeBufferMs);
 }
 
 export function fetchGyrData(deviceId: string, bufferMs: number | null = null) {
-  return PolarBridge.fetchGyrData(deviceId, bufferMs);
+  const safeBufferMs = bufferMs ?? -1;
+  return PolarBridge.fetchGyrData(deviceId, safeBufferMs);
 }
 
 export function fetchPpgData(deviceId: string, bufferMs: number | null = null) {
-  return PolarBridge.fetchPpgData(deviceId, bufferMs);
+  const safeBufferMs = bufferMs ?? -1;
+  return PolarBridge.fetchPpgData(deviceId, safeBufferMs);
 }
 
 export function enableSdkMode(deviceId: string) {
