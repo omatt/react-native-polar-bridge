@@ -132,7 +132,7 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         let allSettings = api.requestFullStreamSettings(identifier, feature: feature)
             .catch { error in
                 NSLog("Full stream settings NOT available for \(feature). Reason: \(error.localizedDescription)")
-                return Single.just(PolarSensorSetting([:]))
+                return Single.just(try PolarSensorSetting([:]))
             }
 
         return Single.zip(availableSettings, allSettings)
