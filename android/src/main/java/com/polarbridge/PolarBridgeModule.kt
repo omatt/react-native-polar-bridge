@@ -18,7 +18,7 @@ import io.reactivex.rxjava3.core.Single
 import java.util.*
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.TimeUnit
-import java.time.Instant
+import java.time.*
 
 @ReactModule(name = PolarBridgeModule.NAME)
 class PolarBridgeModule(reactContext: ReactApplicationContext) :
@@ -210,7 +210,9 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
             )
 
             val map: WritableMap = Arguments.createMap()
-            map.putDouble("recTimestamp", polarOfflineRecordingEntry.date.time.toDouble())
+            map.putDouble("recTimestamp", polarOfflineRecordingEntry.date
+              .toInstant(ZoneOffset.UTC)
+              .toEpochMilli().toDouble())
             map.putString("path", polarOfflineRecordingEntry.path)
             map.putDouble("size", polarOfflineRecordingEntry.size.toDouble())
             array.pushMap(map)
@@ -373,10 +375,14 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
                   Log.d(TAG, "Recording ${polarOfflineRecordingEntry.path} downloaded. Size: ${polarOfflineRecordingEntry.size}")
                   when (it) {
                     is PolarOfflineRecordingData.HrOfflineRecording -> {
-                      Log.d(TAG, "HR Offline Recording started at ${it.startTime.time}")
+                      Log.d(TAG, "HR Offline Recording started at ${it.startTime
+                        .toInstant(ZoneOffset.UTC)
+                        .toEpochMilli()}")
                       var index = 0;
                       val intervalInMs = 1000; // 1Hz
-                      val firstSampleDateUTC = it.startTime.timeInMillis + intervalInMs
+                      val firstSampleDateUTC = it.startTime
+                        .toInstant(ZoneOffset.UTC)
+                        .toEpochMilli() + intervalInMs
                       for (sample in it.data.samples) {
                         val unixTimestamp = firstSampleDateUTC + intervalInMs * index++;
                         val timestamp = Instant.ofEpochMilli(unixTimestamp)
@@ -393,7 +399,8 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
                       }
                     }
                     is PolarOfflineRecordingData.AccOfflineRecording -> {
-                      Log.d(TAG, "ACC Offline Recording started at ${it.startTime.time}")
+                      Log.d(TAG, "ACC Offline Recording started at ${it.startTime.toInstant(ZoneOffset.UTC)
+                        .toEpochMilli()}")
                       var index = 0;
                       for (sample in it.data.samples) {
                         Log.d(TAG, "ACC data: time: ${sample.timeStamp} X: ${sample.x} Y: ${sample.y} Z: ${sample.z} entry ${++index} of ${it.data.samples.size}")
@@ -409,7 +416,8 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
                       }
                     }
                     is PolarOfflineRecordingData.GyroOfflineRecording -> {
-                      Log.d(TAG, "GYRO Offline Recording started at ${it.startTime.time}")
+                      Log.d(TAG, "GYRO Offline Recording started at ${it.startTime.toInstant(ZoneOffset.UTC)
+                        .toEpochMilli()}")
                       var index = 0;
                       for (sample in it.data.samples) {
                         Log.d(TAG, "GYRO data: ${sample.timeStamp} X: ${sample.x} Y: ${sample.y} Z: ${sample.z} entry ${++index} of ${it.data.samples.size}")
@@ -425,7 +433,8 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
                       }
                     }
                     is PolarOfflineRecordingData.PpgOfflineRecording -> {
-                      Log.d(TAG, "PPG Offline Recording started at ${it.startTime.time}")
+                      Log.d(TAG, "PPG Offline Recording started at ${it.startTime.toInstant(ZoneOffset.UTC)
+                        .toEpochMilli()}")
                       var index = 0;
                       for (sample in it.data.samples) {
                         Log.d(TAG, "PPG data: ${sample.timeStamp} ppg0 ${sample.channelSamples[0]} ppg1 ${sample.channelSamples[1]} ppg2 ${sample.channelSamples[2]} ambient ${sample.channelSamples[3]} entry ${++index} of ${it.data.samples.size}")
@@ -505,15 +514,14 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
 
   // Sets the date time on the Polar device
   override fun setDeviceTime(deviceId: String) {
-    val calendar = Calendar.getInstance()
-    calendar.time = Date()
-    Log.e(TAG, "Set device: $deviceId time to ${calendar.time}")
+    val now = LocalDateTime.now(ZoneOffset.UTC)
+    Log.e(TAG, "Set device: $deviceId time to ${now}")
     try {
-      api.setLocalTime(deviceId, calendar)
+      api.setLocalTime(deviceId, now)
         .observeOn(AndroidSchedulers.mainThread())
         .subscribe(
           {
-            val timeSetString = "time ${calendar.time} set to device"
+            val timeSetString = "time ${now} set to device"
             Log.d(TAG, timeSetString)
           },
           { error: Throwable -> Log.e(TAG, "set time failed: $error") }
@@ -529,13 +537,14 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
       .observeOn(AndroidSchedulers.mainThread())
       .subscribe(
         { calendar ->
-          val timeGetString = "${calendar.time} read from the device"
+          val timeGetString = "${calendar} read from the device"
 
           val map: WritableMap = Arguments.createMap()
-          map.putString("time", "${calendar.time}")
+          map.putString("time", "${calendar.toInstant(ZoneOffset.UTC)}")
           // Long not supported, use double as workaround
           // See: https://github.com/facebook/react-native/issues/9685
-          map.putDouble("timeMs", calendar.timeInMillis.toDouble())
+          map.putDouble("timeMs", calendar.toInstant(ZoneOffset.UTC)
+            .toEpochMilli().toDouble())
           promise.resolve(map)
         },
         { error: Throwable ->
@@ -567,9 +576,6 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
   }
 
   override fun doFactoryReset(deviceId: String) {
-    val calendar = Calendar.getInstance()
-    calendar.time = Date()
-    Log.e(TAG, "Set device: $deviceId time to ${calendar.time}")
     try {
       api.doFactoryReset(deviceId, preservePairingInformation = true)
         .observeOn(AndroidSchedulers.mainThread())

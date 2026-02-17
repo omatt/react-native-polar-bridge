@@ -35,12 +35,12 @@ export const formatDateYYYYMMDDHHMMSS = (unixTimestamp) => {
 
   const pad = (num) => String(num).padStart(2, '0');
 
-  const year = date.getFullYear();
-  const month = pad(date.getMonth() + 1); // Months are 0-indexed
-  const day = pad(date.getDate());
-  const hours = pad(date.getHours());
-  const minutes = pad(date.getMinutes());
-  const seconds = pad(date.getSeconds());
+  const year = date.getUTCFullYear();
+  const month = pad(date.getUTCMonth() + 1); // Months are 0-indexed
+  const day = pad(date.getUTCDay());
+  const hours = pad(date.getUTCHours());
+  const minutes = pad(date.getUTCMinutes());
+  const seconds = pad(date.getUTCSeconds());
 
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 };
