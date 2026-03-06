@@ -65,13 +65,13 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
 
   override fun connectToDevice(deviceId: String, promise: Promise) {
     val map: WritableMap = Arguments.createMap()
-    var deviceConnected = false
-    var batteryReceived = false
+    var connectedId: String? = null
+    var battery: Int? = null
+    var isResolved = false // Guard to ensure we only resolve once
     api.setApiCallback(object : PolarBleApiCallback() {
       override fun deviceConnected(polarDeviceInfo: PolarDeviceInfo) {
         Log.d("Polar", "Connected: ${polarDeviceInfo.deviceId}")
-        map.putString("connectedDeviceId", polarDeviceInfo.deviceId)
-        deviceConnected = true
+        connectedId = polarDeviceInfo.deviceId
         runResolve()
       }
 
@@ -88,13 +88,14 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
 
       override fun batteryLevelReceived(identifier: String, level: Int) {
         Log.d("Polar", "Battery for $identifier: $level%")
-        map.putInt("batteryLevel", level)
-        batteryReceived = true
+        battery = level
         runResolve()
       }
 
       private fun runResolve() {
-        if (deviceConnected && batteryReceived) {
+        if (connectedId != null && battery != null && !isResolved) {
+          map.putString("connectedDeviceId", connectedId)
+          map.putInt("batteryLevel", battery)
           promise.resolve(map)
         }
       }
