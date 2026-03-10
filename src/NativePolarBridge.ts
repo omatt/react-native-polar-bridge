@@ -10,6 +10,8 @@ export interface Spec extends TurboModule {
   fetchAccData(deviceId: string, bufferMs: number | null): void;
   fetchGyrData(deviceId: string, bufferMs: number | null): void;
   fetchPpgData(deviceId: string, bufferMs: number | null): void;
+  getBatteryLevel(deviceId: string): Promise<number>;
+  getChargerState(deviceId: string): Promise<string>;
   enableSdkMode(deviceId: string): void;
   disableSdkMode(deviceId: string): void;
   getDeviceTime(deviceId: string): Promise<DeviceTime>;

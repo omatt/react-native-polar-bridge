@@ -11,8 +11,10 @@ import com.polar.sdk.api.errors.PolarInvalidArgument
 import com.polar.sdk.api.model.*
 import io.reactivex.rxjava3.disposables.Disposable
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
+import io.reactivex.rxjava3.schedulers.Schedulers
 import com.polar.androidcommunications.api.ble.model.DisInfo
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import com.polar.androidcommunications.api.ble.model.gatt.client.ChargeState
 import io.reactivex.rxjava3.core.Flowable
 import io.reactivex.rxjava3.core.Single
 import java.util.*
@@ -64,7 +66,6 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
   }
 
   override fun connectToDevice(deviceId: String, promise: Promise) {
-    val map: WritableMap = Arguments.createMap()
     var connectedId: String? = null
     var battery: Int? = null
     var isResolved = false // Guard to ensure we only resolve once
@@ -94,6 +95,8 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
 
       private fun runResolve() {
         if (connectedId != null && battery != null && !isResolved) {
+          isResolved = true
+          val map : WritableMap = Arguments.createMap() // Create map ONLY when ready
           map.putString("connectedDeviceId", connectedId)
           map.putInt("batteryLevel", battery)
           promise.resolve(map)
@@ -116,6 +119,22 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
     } catch (polarInvalidArgument: PolarInvalidArgument) {
       Log.e(TAG, "Failed to disconnect from device. Reason $polarInvalidArgument ")
     }
+  }
+
+  override fun getBatteryLevel(deviceId: String, promise: Promise) {
+    val batteryLevel = api.getBatteryLevel(deviceId)
+    Log.d("Polar", "Battery Level: $batteryLevel")
+    val map: WritableMap = Arguments.createMap()
+    map.putInt("batteryLevel", batteryLevel)
+    promise.resolve(map)
+  }
+
+  override fun getChargerState(deviceId: String, promise: Promise) {
+    val chargerState : ChargeState = api.getChargerState(deviceId)
+    Log.d("Polar", "Charger State: ${chargerState.name}")
+    val map: WritableMap = Arguments.createMap()
+    map.putString("chargerState", "$chargerState")
+    promise.resolve(map)
   }
 
   override fun enableSdkMode(deviceId: String) {
