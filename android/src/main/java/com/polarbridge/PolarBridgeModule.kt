@@ -64,7 +64,6 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
   }
 
   override fun connectToDevice(deviceId: String, promise: Promise) {
-    val map: WritableMap = Arguments.createMap()
     var connectedId: String? = null
     var battery: Int? = null
     var isResolved = false // Guard to ensure we only resolve once
@@ -94,6 +93,8 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
 
       private fun runResolve() {
         if (connectedId != null && battery != null && !isResolved) {
+          isResolved = true
+          val map : WritableMap = Arguments.createMap() // Create map ONLY when ready
           map.putString("connectedDeviceId", connectedId)
           map.putInt("batteryLevel", battery)
           promise.resolve(map)
