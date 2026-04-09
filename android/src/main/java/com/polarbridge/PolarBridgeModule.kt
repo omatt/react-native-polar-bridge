@@ -695,7 +695,7 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
           )
       } else {
         // NOTE dispose will stop streaming if it is "running"
-        hrDisposable?.dispose()
+        disposeHrStream()
         Log.d(TAG, "HR stream stopped")
       }
     } catch(polarInvalidArgument: PolarInvalidArgument){
@@ -788,7 +788,7 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
           )
       } else {
         // NOTE dispose will stop streaming if it is "running"
-        accDisposable?.dispose()
+        disposeAccStream()
         Log.d(TAG, "ACC stream stopped")
       }
     } catch(polarInvalidArgument: PolarInvalidArgument){
@@ -847,7 +847,7 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
             }
           )
       } else {
-        gyrDisposable?.dispose()
+        disposeGyrStream()
         Log.d(TAG, "GYR stream stopped")
       }
     } catch(polarInvalidArgument: PolarInvalidArgument){
@@ -908,7 +908,7 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
             }
           )
       } else {
-        ppgDisposable?.dispose()
+        disposePpgStream()
         Log.d(TAG, "PPG stream stopped")
       }
     } catch(polarInvalidArgument: PolarInvalidArgument){
@@ -992,19 +992,46 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
   }
 
   override fun disposeHrStream(){
-    hrDisposable?.dispose()
+    try {
+      hrDisposable?.dispose()
+    } catch (e: Exception) {
+      // Bluetooth service is dead, cleanup command failed.
+      Log.w(TAG, "Failed to dispose HR stream cleanly. Bluetooth service likely died.", e)
+    } finally {
+      // Nullify the reference to flag that the stream is gone,
+      // preventing memory leaks or further attempts to dispose of a dead stream.
+      hrDisposable = null
+    }
   }
 
   override fun disposeAccStream(){
-    accDisposable?.dispose()
+    try {
+      accDisposable?.dispose()
+    } catch (e: Exception) {
+      Log.w(TAG, "Failed to dispose ACC stream cleanly. Bluetooth service likely died.", e)
+    } finally {
+      accDisposable = null
+    }
   }
 
   override fun disposeGyrStream(){
-    gyrDisposable?.dispose()
+    try {
+      gyrDisposable?.dispose()
+    } catch (e: Exception) {
+      Log.w(TAG, "Failed to dispose GYR stream cleanly. Bluetooth service likely died.", e)
+    } finally {
+      gyrDisposable = null
+    }
   }
 
   override fun disposePpgStream(){
-    ppgDisposable?.dispose()
+    try {
+      ppgDisposable?.dispose()
+    } catch (e: Exception) {
+      Log.w(TAG, "Failed to dispose PPG stream cleanly. Bluetooth service likely died.", e)
+    } finally {
+      ppgDisposable = null
+    }
   }
 
   private fun disposeAllStreams() {
