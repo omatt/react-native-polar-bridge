@@ -1,4 +1,9 @@
+import { NativeEventEmitter, NativeModules } from 'react-native';
 import PolarBridge from './NativePolarBridge';
+
+const { PolarBridgeModule } = NativeModules;
+const polarEmitter = new NativeEventEmitter(PolarBridgeModule);
+export { polarEmitter };
 
 export function multiply(a: number, b: number): number {
   return PolarBridge.multiply(a, b);

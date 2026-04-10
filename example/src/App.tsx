@@ -3,8 +3,6 @@ import {
   View,
   StyleSheet,
   Button,
-  NativeModules,
-  NativeEventEmitter,
   Alert, ScrollView, Switch,
 } from 'react-native';
 import {
@@ -29,7 +27,12 @@ import {
   getDiskSpace,
   OfflineRecordingFeature,
   fetchOfflineRecordings,
-  deleteAllOfflineRecordings, downloadOfflineRecordings, startOfflineRecording, stopOfflineRecording, multiply,
+  deleteAllOfflineRecordings,
+  downloadOfflineRecordings,
+  startOfflineRecording,
+  stopOfflineRecording,
+  multiply,
+  polarEmitter,
 } from 'react-native-polar-bridge';
 import { useEffect, useState } from 'react';
 
@@ -55,9 +58,6 @@ import {checkPermission, requestPermissions} from "./utils/permissions_manager";
 
 const result = multiply(3, 7);
 
-const {PolarBridge} = NativeModules;
-const polarEmitter = new NativeEventEmitter(PolarBridge);
-
 const displayDialogNoConnectedDevice = () => {
   console.log('Empty Device ID or no connected Device');
   return Alert.alert('Error', 'No connected Polar device. Empty deviceId!', [
@@ -67,9 +67,7 @@ const displayDialogNoConnectedDevice = () => {
 
 export default function App() {
   const deviceId = 'D8207828';
-  // const deviceId = 'D8455025';
   console.log(`Result: ${result}`)
-  // requestBluetoothPermissions().then();
 
   checkPermission().then((isGranted: boolean) =>{
     if(!isGranted){
