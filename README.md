@@ -62,15 +62,6 @@ export default function App(){
 disconnectFromDevice(deviceId);
 ```
 
-### Initialize NativeModules
-
-Import `NativeModules` from react-native to expose native code to be able to listen to emitted events.
-
-```js
-const {PolarBridge} = NativeModules;
-const polarEmitter = new NativeEventEmitter(PolarBridge);
-```
-
 ### Scan Devices
 
 Use `scanDevices()` to scan for nearby Polar devices
@@ -79,9 +70,11 @@ Use `scanDevices()` to scan for nearby Polar devices
 scanDevices();
 ```
 
-and listen for emitted events for the result.
+and listen for emitted events for the result using `polarEmitter`
 
 ```js
+import { polarEmitter } from 'react-native-polar-bridge';
+
 const [devices, setDevices] = useState<Device[]>([]);
 
 useEffect(() => {
