@@ -3,7 +3,7 @@ import {
   View,
   StyleSheet,
   Button,
-  Alert, ScrollView, Switch,
+  Alert, ScrollView, Switch, NativeModules, NativeEventEmitter,
 } from 'react-native';
 import {
   connectToDevice,
@@ -32,7 +32,6 @@ import {
   startOfflineRecording,
   stopOfflineRecording,
   multiply,
-  polarEmitter,
 } from 'react-native-polar-bridge';
 import { useEffect, useState } from 'react';
 
@@ -57,6 +56,9 @@ import type {
 import {checkPermission, requestPermissions} from "./utils/permissions_manager";
 
 const result = multiply(3, 7);
+
+const { PolarBridge } = NativeModules;
+const polarEmitter = new NativeEventEmitter(PolarBridge);
 
 const displayDialogNoConnectedDevice = () => {
   console.log('Empty Device ID or no connected Device');

@@ -36,8 +36,7 @@ class PolarBridge: RCTEventEmitter, ObservableObject
     private var pendingRejecter: RCTPromiseRejectBlock?
 
     private var scanDisposable: Disposable?
-    private var hrDisposable: Disposable?
-    private var isHrStreaming = false
+    private var hrManager: HrStreamManager?
     private var accDisposable: Disposable?
     private var isAccStreaming = false
     private var gyrDisposable: Disposable?
@@ -68,6 +67,8 @@ class PolarBridge: RCTEventEmitter, ObservableObject
                                                                                           PolarBleSdkFeature.feature_polar_h10_exercise_recording])
 
         setObservers()
+        // Initialize stream managers
+        hrManager = HrStreamManager(api: api, bridge: self)
     }
 
     private func setObservers() {
@@ -161,129 +162,9 @@ class PolarBridge: RCTEventEmitter, ObservableObject
             .asObservable()
     }
 
-    private var hrBuffer: [[String: Any]] = []
-    private let hrBufferQueue = DispatchQueue(label: "com.polarbridge.hrBufferQueue")
-    private var hrFlushTimer: Timer?
-
-    private func startHrFlushTimer(bufferMs: TimeInterval) {
-        stopHrFlushTimer()
-        let intervalSeconds = bufferMs / 1000.0   // Timer always uses seconds,
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            self.hrFlushTimer = Timer(
-                timeInterval: intervalSeconds,
-                repeats: true
-            ) { [weak self] _ in
-                self?.flushHrBuffer()
-            }
-
-            RunLoop.main.add(self.hrFlushTimer!, forMode: .common)
-        }
-    }
-
-    private func stopHrFlushTimer() {
-        DispatchQueue.main.async { [weak self] in
-            self?.hrFlushTimer?.invalidate()
-            self?.hrFlushTimer = nil
-        }
-    }
-
-    private func flushHrBuffer() {
-        hrBufferQueue.async { [weak self] in
-            guard let self = self else { return }
-            guard !self.hrBuffer.isEmpty else { return }
-
-            let events = self.hrBuffer
-            self.hrBuffer.removeAll()
-
-            DispatchQueue.main.async {
-                for event in events {
-                    self.sendEvent(
-                        withName: PolarEvent.PolarHrData.rawValue,
-                        body: event
-                    )
-                }
-            }
-        }
-    }
-
     @objc(fetchHrData:bufferMs:)
     func fetchHrData(_ deviceId: String, bufferMs: NSNumber?) {
-        NSLog("PolarBridge: Fetch HR Data called on: \(deviceId) bufferMs: \(bufferMs)")
-        let resolvedBufferMs: TimeInterval
-
-        if let number = bufferMs, !(number is NSNull) {
-           resolvedBufferMs = number.doubleValue >= 0 ? number.doubleValue : SENSOR_BUFFER_MS
-        } else {
-           resolvedBufferMs = SENSOR_BUFFER_MS
-        }
-        guard let api = api else {
-            NSLog("PolarBridge: Polar API not initialized")
-            return
-        }
-
-        // Dispose previous subscription if running
-        if isHrStreaming {
-            disposeHrStream()
-            stopHrFlushTimer()
-            flushHrBuffer()
-            isHrStreaming = false
-
-            NSLog("PolarBridge: HR Stream stopped")
-            sendEvent(withName: PolarEvent.PolarHrComplete.rawValue, body: ["message": "HR Stream stopped"])
-            return
-        }
-
-        isHrStreaming = true
-        startHrFlushTimer(bufferMs: resolvedBufferMs)
-
-        // Start HR streaming
-        hrDisposable = api.startHrStreaming(deviceId)
-            .observe(on: MainScheduler.instance)
-            .subscribe(
-                onNext: { [weak self] hrData in
-                    guard let self = self else { return }
-                    NSLog("PolarBridge: HR data samples count: \(hrData.count)")
-
-                    self.hrBufferQueue.async {
-                        for sample in hrData {
-                            NSLog("HR bpm: \(sample.hr), rrs: \(sample.rrsMs), rrAvailable: \(sample.rrAvailable), contactStatus: \(sample.contactStatus), contactStatusSupported: \(sample.contactStatusSupported)")
-
-                            // Create dictionary to send as event
-                            var event: [String: Any] = [:]
-                            event["hr"] = sample.hr
-                            event["rrsMs"] = sample.rrsMs
-                            event["rrAvailable"] = sample.rrAvailable
-                            event["contactStatus"] = sample.contactStatus
-                            event["contactStatusSupported"] = sample.contactStatusSupported
-                            event["timestamp"] = Date().timeIntervalSince1970 * 1000
-
-//                             self.sendEvent(withName: PolarEvent.PolarHrData.rawValue, body: event)
-                            self.hrBuffer.append(event)
-                        }
-                    }
-                },
-                onError: { [weak self] error in
-                    guard let self = self else { return }
-                    NSLog("PolarBridge: HR stream failed: \(error.localizedDescription)")
-                    self.stopHrFlushTimer()
-                    self.flushHrBuffer()
-                    self.isHrStreaming = false
-
-                    self.sendEvent(withName: PolarEvent.PolarHrError.rawValue, body: ["error": error.localizedDescription])
-                },
-                onCompleted: { [weak self] in
-                    guard let self = self else { return }
-                    NSLog("PolarBridge: HR stream complete")
-                    self.stopHrFlushTimer()
-                    self.flushHrBuffer()
-                    self.isHrStreaming = false
-                    self.sendEvent(withName: PolarEvent.PolarHrComplete.rawValue, body: ["message": "HR stream complete"])
-                }
-            )
-
-        hrDisposable?.disposed(by: disposeBag)
-
+        hrManager?.fetchHrData(deviceId, bufferMs: bufferMs)
     }
 
     // ACC
@@ -721,8 +602,7 @@ class PolarBridge: RCTEventEmitter, ObservableObject
     }
 
     @objc func disposeHrStream(){
-        isHrStreaming = false
-        hrDisposable?.dispose()
+        hrManager?.disposeHrStream()
     }
 
     @objc func disposeAccStream(){
