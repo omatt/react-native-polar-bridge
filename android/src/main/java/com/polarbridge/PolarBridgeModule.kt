@@ -9,6 +9,7 @@ import com.polar.sdk.api.PolarBleApiDefaultImpl
 import com.polar.sdk.api.PolarH10OfflineExerciseApi
 import com.polar.sdk.api.errors.PolarInvalidArgument
 import com.polar.sdk.api.model.*
+import com.polarbridge.sensors.*
 import io.reactivex.rxjava3.disposables.Disposable
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import com.polar.androidcommunications.api.ble.model.DisInfo
@@ -39,11 +40,7 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
   // ATTENTION! Replace with the device ID from your device.
   private var deviceId = "B4291522"
 
-  private var hrDisposable: Disposable? = null
   private var scanDisposable: Disposable? = null
-  private var accDisposable: Disposable? = null
-  private var gyrDisposable: Disposable? = null
-  private var ppgDisposable: Disposable? = null
 
   private val api: PolarBleApi by lazy {
     // Notice all features are enabled
@@ -62,6 +59,12 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
       )
     )
   }
+
+  private val hrManager: HrStreamManager by lazy { HrStreamManager(api, ::sendEvent) }
+  private val sensorSettings: SensorSettings by lazy { SensorSettings(api) }
+  private val accManager: AccStreamManager by lazy { AccStreamManager(api, ::sendEvent) }
+  private val gyrManager: GyrStreamManager by lazy { GyrStreamManager(api, ::sendEvent) }
+  private val ppgManager: PpgStreamManager by lazy { PpgStreamManager(api, ::sendEvent) }
 
   override fun connectToDevice(deviceId: String, promise: Promise) {
     var connectedId: String? = null
@@ -627,293 +630,20 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  data class HrSampleWithTimestamp(
-    val data: PolarHrData.PolarHrSample,
-    val timestampMs: Long
-  )
-
   override fun fetchHrData(deviceId: String, ms: Double?) {
-    Log.e(TAG, "Fetch Heart Data called on: $deviceId ")
-    val bufferMs = ms?.toLong()?.takeIf { it >= 0 } ?: SENSOR_BUFFER_MS
-    val isDisposed = hrDisposable?.isDisposed ?: true
-    try{
-      if (isDisposed) {
-        hrDisposable = api.startHrStreaming(deviceId)
-          .flatMapIterable { hrData ->
-            hrData.samples.map { sample ->
-              HrSampleWithTimestamp(
-                data = sample,
-                timestampMs = System.currentTimeMillis()
-              )
-            }
-          }
-          .buffer(bufferMs, TimeUnit.MILLISECONDS)
-          .observeOn(AndroidSchedulers.mainThread())
-          .subscribe(
-            { samples ->
-              if (samples.isEmpty()) return@subscribe
-
-              Log.d(TAG, "Flushing HR buffer (${samples.size} samples)")
-              for (item in samples) {
-                val sample = item.data
-                Log.d(TAG, "HR     bpm: ${sample.hr} " +
-                  "rrs: ${sample.rrsMs} " +
-                  "rrAvailable: ${sample.rrAvailable} " +
-                  "contactStatus: ${sample.contactStatus} " +
-                  "contactStatusSupported: ${sample.contactStatusSupported}")
-
-                val event: WritableMap = Arguments.createMap()
-                event.putInt("hr", sample.hr)
-
-                val rrsArray: WritableArray = Arguments.createArray()
-                sample.rrsMs.forEach { rrsValue ->
-                  rrsArray.pushInt(rrsValue)
-                }
-                event.putArray("rrsMs", rrsArray)
-                event.putBoolean("rrAvailable", sample.rrAvailable)
-                event.putBoolean("contactStatus", sample.contactStatus)
-                event.putBoolean("contactStatusSupported", sample.contactStatusSupported)
-                event.putDouble("timestamp", item.timestampMs.toDouble())
-
-                sendEvent("PolarHrData", event)
-              }
-            },
-            { error: Throwable ->
-              Log.e(TAG, "HR stream failed. Reason $error")
-
-              val errorEvent = Arguments.createMap()
-              errorEvent.putString("error", error.toString())
-              sendEvent("PolarHrError", errorEvent)
-            },
-            {
-              Log.d(TAG, "HR stream complete")
-
-              val completeEvent = Arguments.createMap()
-              completeEvent.putString("message", "HR stream complete")
-              sendEvent("PolarHrComplete", completeEvent)
-            }
-          )
-      } else {
-        // NOTE dispose will stop streaming if it is "running"
-        disposeHrStream()
-        Log.d(TAG, "HR stream stopped")
-      }
-    } catch(polarInvalidArgument: PolarInvalidArgument){
-      Log.e(TAG, "Failed to fetch HR Data. Reason $polarInvalidArgument ")
-    }
-  }
-
-  private fun requestStreamSettings(identifier: String, feature: PolarBleApi.PolarDeviceDataType): Flowable<PolarSensorSetting> {
-    val availableSettings = api.requestStreamSettings(identifier, feature)
-    val allSettings = api.requestFullStreamSettings(identifier, feature)
-      .onErrorReturn { error: Throwable ->
-        Log.w(TAG, "Full stream settings are not available for feature $feature. REASON: $error")
-        PolarSensorSetting(emptyMap())
-      }
-    return Single.zip(availableSettings, allSettings) { available: PolarSensorSetting, all: PolarSensorSetting ->
-      if (available.settings.isEmpty()) {
-        throw Throwable("Settings are not available")
-      } else {
-        Log.d(TAG, "Feature " + feature + " available settings " + available.settings)
-        Log.d(TAG, "Feature " + feature + " all settings " + all.settings)
-        return@zip android.util.Pair(available, all)
-      }
-    }
-      .observeOn(AndroidSchedulers.mainThread())
-      .toFlowable()
-      .flatMap { sensorSettings: android.util.Pair<PolarSensorSetting, PolarSensorSetting> ->
-//        DialogUtility.showAllSettingsDialog(
-//          this@MainActivity,
-//          sensorSettings.first.settings,
-//          sensorSettings.second.settings
-//        ).toFlowable()
-        // Contains settings set by default
-        sensorSettings.first.settings.forEach { setting ->
-          Log.d(TAG, "First Setting: $setting")
-        }
-        // Contains all available settings
-        sensorSettings.second.settings.forEach { setting ->
-          Log.d(TAG, "Second Setting: $setting")
-        }
-        Single.just(sensorSettings.first).toFlowable()  // Load default device settings
-      }
+    hrManager.fetchHrData(deviceId, ms, SENSOR_BUFFER_MS)
   }
 
   override fun fetchAccData(deviceId: String, ms: Double?) {
-    Log.e(TAG, "Fetch Accelerometer Data called on: $deviceId ")
-    val bufferMs = ms?.toLong()?.takeIf { it >= 0 } ?: SENSOR_BUFFER_MS
-    val isDisposed = accDisposable?.isDisposed ?: true
-    try{
-      if (isDisposed) {
-        accDisposable = requestStreamSettings(deviceId, PolarBleApi.PolarDeviceDataType.ACC)
-          .flatMap { settings: PolarSensorSetting ->
-            api.startAccStreaming(deviceId, settings)
-          }
-          .flatMapIterable { it.samples }
-          .buffer(bufferMs, TimeUnit.MILLISECONDS)
-          .observeOn(AndroidSchedulers.mainThread())
-          .subscribe(
-            { samples ->
-              if (samples.isEmpty()) return@subscribe
-              Log.d(TAG, "Flushing ACC buffer (${samples.size} samples)")
-
-              for (data in samples) {
-                Log.d(TAG, "ACC    x: ${data.x} y: ${data.y} z: ${data.z} timeStamp: ${data.timeStamp}")
-
-                val event: WritableMap = Arguments.createMap()
-                event.putInt("accX", data.x)
-                event.putInt("accY", data.y)
-                event.putInt("accZ", data.z)
-                // Long not supported, use double as workaround
-                // See: https://github.com/facebook/react-native/issues/9685
-                event.putDouble("accTimestamp", data.timeStamp.toDouble())
-
-                sendEvent("PolarAccData", event)
-              }
-            },
-            { error: Throwable ->
-              Log.e(TAG, "ACC stream failed. Reason $error")
-
-              val errorEvent = Arguments.createMap()
-              errorEvent.putString("error", error.toString())
-              sendEvent("PolarAccError", errorEvent)
-            },
-            {
-              Log.d(TAG, "ACC stream complete")
-
-              val completeEvent = Arguments.createMap()
-              completeEvent.putString("message", "ACC stream complete")
-              sendEvent("PolarAccComplete", completeEvent)
-            }
-          )
-      } else {
-        // NOTE dispose will stop streaming if it is "running"
-        disposeAccStream()
-        Log.d(TAG, "ACC stream stopped")
-      }
-    } catch(polarInvalidArgument: PolarInvalidArgument){
-      Log.e(TAG, "Failed to fetch ACC Data. Reason $polarInvalidArgument ")
-    }
+    accManager.fetchAccData(deviceId, sensorSettings, ms, SENSOR_BUFFER_MS)
   }
 
   override fun fetchGyrData(deviceId: String, ms: Double?) {
-    Log.e(TAG, "Fetch Gyroscope Data called on: $deviceId ")
-    val bufferMs = ms?.toLong()?.takeIf { it >= 0 } ?: SENSOR_BUFFER_MS
-    val isDisposed = gyrDisposable?.isDisposed ?: true
-    try {
-      if (isDisposed) {
-        gyrDisposable = requestStreamSettings(deviceId, PolarBleApi.PolarDeviceDataType.GYRO)
-          .flatMap { settings: PolarSensorSetting ->
-            api.startGyroStreaming(deviceId, settings)
-          }
-          .flatMapIterable { it.samples }
-          .buffer(bufferMs, TimeUnit.MILLISECONDS)
-          .observeOn(AndroidSchedulers.mainThread())
-          .subscribe(
-            { samples ->
-              if (samples.isEmpty()) return@subscribe
-
-              Log.d(TAG, "Flushing GYR buffer (${samples.size} samples)")
-
-              for (data in samples) {
-                Log.d(TAG, "GYR    x: ${data.x} y: ${data.y} z: ${data.z} timeStamp: ${data.timeStamp}")
-
-                val event: WritableMap = Arguments.createMap()
-                // Float not supported
-                // See: https://github.com/facebook/react-native/issues/9685
-                // See: https://javadoc.io/doc/com.facebook.react/react-native/0.20.1/com/facebook/react/bridge/WritableMap.html
-                event.putString("gyrX", "${data.x}")
-                event.putString("gyrY", "${data.y}")
-                event.putString("gyrZ", "${data.z}")
-                // Long not supported, use double as workaround
-                event.putDouble("gyrTimestamp", data.timeStamp.toDouble())
-
-                sendEvent("PolarGyrData", event)
-              }
-            },
-            { error: Throwable ->
-              Log.e(TAG, "GYR stream failed. Reason $error")
-
-              val errorEvent = Arguments.createMap()
-              errorEvent.putString("error", error.toString())
-              sendEvent("PolarGyrError", errorEvent)
-            },
-            {
-              Log.d(TAG, "GYR stream complete")
-
-              val completeEvent = Arguments.createMap()
-              completeEvent.putString("message", "GYR stream complete")
-              sendEvent("PolarGyrComplete", completeEvent)
-            }
-          )
-      } else {
-        disposeGyrStream()
-        Log.d(TAG, "GYR stream stopped")
-      }
-    } catch(polarInvalidArgument: PolarInvalidArgument){
-      Log.e(TAG, "Failed to fetch GYR Data. Reason $polarInvalidArgument ")
-    }
+    gyrManager.fetchGyrData(deviceId, sensorSettings, ms, SENSOR_BUFFER_MS)
   }
 
   override fun fetchPpgData(deviceId: String, ms: Double?) {
-    Log.e(TAG, "Fetch Photoplethysmograph Data called on: $deviceId ")
-    val bufferMs = ms?.toLong()?.takeIf { it >= 0 } ?: SENSOR_BUFFER_MS
-    val isDisposed = ppgDisposable?.isDisposed ?: true
-    try {
-      if (isDisposed) {
-        ppgDisposable = requestStreamSettings(deviceId, PolarBleApi.PolarDeviceDataType.PPG)
-          .flatMap { settings: PolarSensorSetting ->
-            api.startPpgStreaming(deviceId, settings)
-          }
-          .filter { it.type == PolarPpgData.PpgDataType.PPG3_AMBIENT1 }
-          .flatMapIterable { it.samples }
-          .buffer(bufferMs, TimeUnit.MILLISECONDS)
-          .observeOn(AndroidSchedulers.mainThread())
-          .subscribe(
-            { samples ->
-              if (samples.isEmpty()) return@subscribe
-
-              Log.d(TAG, "Flushing PPG buffer (${samples.size} samples)")
-
-              for (data in samples) {
-                Log.d(TAG, "PPG    ppg0: ${data.channelSamples[0]} ppg1: ${data.channelSamples[1]} ppg2: ${data.channelSamples[2]} ambient: ${data.channelSamples[3]} timeStamp: ${data.timeStamp}")
-
-                val event: WritableMap = Arguments.createMap()
-                // Float not supported
-                // See: https://github.com/facebook/react-native/issues/9685
-                // See: https://javadoc.io/doc/com.facebook.react/react-native/0.20.1/com/facebook/react/bridge/WritableMap.html
-                event.putString("ppg0", "${data.channelSamples[0]}")
-                event.putString("ppg1", "${data.channelSamples[1]}")
-                event.putString("ppg2", "${data.channelSamples[2]}")
-                event.putString("ambient", "${data.channelSamples[3]}")
-                // Long not supported, use double as workaround
-                event.putDouble("ppgTimestamp", data.timeStamp.toDouble())
-
-                sendEvent("PolarPpgData", event)
-              }
-            },
-            { error: Throwable ->
-              Log.e(TAG, "PPG stream failed. Reason $error")
-
-              val errorEvent = Arguments.createMap()
-              errorEvent.putString("error", error.toString())
-              sendEvent("PolarPpgError", errorEvent)
-            },
-            {
-              Log.d(TAG, "PPG stream complete")
-
-              val completeEvent = Arguments.createMap()
-              completeEvent.putString("message", "PPG stream complete")
-              sendEvent("PolarPpgComplete", completeEvent)
-            }
-          )
-      } else {
-        disposePpgStream()
-        Log.d(TAG, "PPG stream stopped")
-      }
-    } catch(polarInvalidArgument: PolarInvalidArgument){
-      Log.e(TAG, "Failed to fetch PPG Data. Reason $polarInvalidArgument ")
-    }
+    ppgManager.fetchPpgData(deviceId, sensorSettings, ms, SENSOR_BUFFER_MS)
   }
 
   fun buildTriggerFeatures(features: ReadableArray): Map<PolarBleApi.PolarDeviceDataType, PolarSensorSetting?> {
@@ -992,53 +722,26 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
   }
 
   override fun disposeHrStream(){
-    try {
-      hrDisposable?.dispose()
-    } catch (e: Exception) {
-      // Bluetooth service is dead, cleanup command failed.
-      Log.w(TAG, "Failed to dispose HR stream cleanly. Bluetooth service likely died.", e)
-    } finally {
-      // Nullify the reference to flag that the stream is gone,
-      // preventing memory leaks or further attempts to dispose of a dead stream.
-      hrDisposable = null
-    }
+    hrManager.disposeHrStream()
   }
 
   override fun disposeAccStream(){
-    try {
-      accDisposable?.dispose()
-    } catch (e: Exception) {
-      Log.w(TAG, "Failed to dispose ACC stream cleanly. Bluetooth service likely died.", e)
-    } finally {
-      accDisposable = null
-    }
+    accManager.disposeAccStream()
   }
 
   override fun disposeGyrStream(){
-    try {
-      gyrDisposable?.dispose()
-    } catch (e: Exception) {
-      Log.w(TAG, "Failed to dispose GYR stream cleanly. Bluetooth service likely died.", e)
-    } finally {
-      gyrDisposable = null
-    }
+    gyrManager.disposeGyrStream()
   }
 
   override fun disposePpgStream(){
-    try {
-      ppgDisposable?.dispose()
-    } catch (e: Exception) {
-      Log.w(TAG, "Failed to dispose PPG stream cleanly. Bluetooth service likely died.", e)
-    } finally {
-      ppgDisposable = null
-    }
+    ppgManager.disposePpgStream()
   }
 
   private fun disposeAllStreams() {
-    hrDisposable?.dispose()
-    accDisposable?.dispose()
-    gyrDisposable?.dispose()
-    ppgDisposable?.dispose()
+    hrManager.disposeHrStream()
+    accManager.disposeAccStream()
+    gyrManager.disposeGyrStream()
+    ppgManager.disposePpgStream()
   }
 
   private fun sendEvent(eventName: String, params: WritableMap?) {
@@ -1046,7 +749,6 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
       .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
       .emit(eventName, params)
   }
-
 
   companion object {
     const val NAME = "PolarBridge"
@@ -1059,4 +761,3 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
 enum class OfflineRecording {
   HR, ACC, GYRO, PPG
 }
-
