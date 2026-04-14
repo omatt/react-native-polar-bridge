@@ -37,12 +37,9 @@ class PolarBridge: RCTEventEmitter, ObservableObject
 
     private var scanDisposable: Disposable?
     private var hrManager: HrStreamManager?
-    private var accDisposable: Disposable?
-    private var isAccStreaming = false
-    private var gyrDisposable: Disposable?
-    private var isGyrStreaming = false
-    private var ppgDisposable: Disposable?
-    private var isPpgStreaming = false
+    private var accManager: AccStreamManager?
+    private var gyrManager: GyrStreamManager?
+    private var ppgManager: PpgStreamManager?
     private let disposeBag = DisposeBag()
 
     /// Flush interval for all sensor buffers (milliseconds)
@@ -69,6 +66,9 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         setObservers()
         // Initialize stream managers
         hrManager = HrStreamManager(api: api, bridge: self)
+        accManager = AccStreamManager(api: api, bridge: self)
+        gyrManager = GyrStreamManager(api: api, bridge: self)
+        ppgManager = PpgStreamManager(api: api, bridge: self)
     }
 
     private func setObservers() {
@@ -118,487 +118,24 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         }
     }
 
-    func requestStreamSettings(_ identifier: String,
-    feature: PolarDeviceDataType
-    ) -> Observable<PolarSensorSetting> {
-
-        guard let api = api else {
-            return Observable.error(NSError(domain: "PolarBridge", code: -1, userInfo: [
-                NSLocalizedDescriptionKey: "Polar API not initialized"
-            ]))
-        }
-
-        let availableSettings = api.requestStreamSettings(identifier, feature: feature)
-
-        let allSettings = api.requestFullStreamSettings(identifier, feature: feature)
-            .catch { error in
-                NSLog("Full stream settings NOT available for \(feature). Reason: \(error.localizedDescription)")
-                return Single.just(try PolarSensorSetting([:]))
-            }
-
-        return Single.zip(availableSettings, allSettings)
-            .flatMap { available, all -> Single<PolarSensorSetting> in
-
-                if available.settings.isEmpty {
-                    return Single.error(NSError(domain: "PolarBridge", code: -2, userInfo: [
-                        NSLocalizedDescriptionKey: "Settings are not available"
-                    ]))
-                }
-
-                NSLog("Feature \(feature) available settings: \(available.settings)")
-                NSLog("Feature \(feature) all settings: \(all.settings)")
-
-                for setting in available.settings {
-                    NSLog("Available Setting: \(setting)")
-                }
-
-                for setting in all.settings {
-                    NSLog("All Setting: \(setting)")
-                }
-
-                // Return default settings (same as Kotlin: sensorSettings.first)
-                return Single.just(available)
-            }
-            .asObservable()
-    }
-
     @objc(fetchHrData:bufferMs:)
     func fetchHrData(_ deviceId: String, bufferMs: NSNumber?) {
         hrManager?.fetchHrData(deviceId, bufferMs: bufferMs)
     }
 
-    // ACC
-    private var accBuffer: [[String: Any]] = []
-    private let accBufferQueue = DispatchQueue(label: "com.polarbridge.accBufferQueue")
-    private var accFlushTimer: Timer?
-
-    // GYR
-    private var gyrBuffer: [[String: Any]] = []
-    private let gyrBufferQueue = DispatchQueue(label: "com.polarbridge.gyrBufferQueue")
-    private var gyrFlushTimer: Timer?
-
-    // PPG
-    private var ppgBuffer: [[String: Any]] = []
-    private let ppgBufferQueue = DispatchQueue(label: "com.polarbridge.ppgBufferQueue")
-    private var ppgFlushTimer: Timer?
-
-    private func startAccFlushTimer(bufferMs: TimeInterval) {
-        stopAccFlushTimer()
-        let intervalSeconds = bufferMs / 1000.0
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-
-            self.accFlushTimer = Timer(
-                timeInterval: intervalSeconds,
-                repeats: true
-            ) { [weak self] _ in
-                self?.flushAccBuffer()
-            }
-
-            RunLoop.main.add(self.accFlushTimer!, forMode: .common)
-        }
-    }
-
-    private func stopAccFlushTimer() {
-        DispatchQueue.main.async { [weak self] in
-            self?.accFlushTimer?.invalidate()
-            self?.accFlushTimer = nil
-        }
-    }
-
-    private func flushAccBuffer() {
-        accBufferQueue.async { [weak self] in
-            guard let self = self else { return }
-            guard !self.accBuffer.isEmpty else { return }
-
-            let events = self.accBuffer
-            self.accBuffer.removeAll()
-
-            DispatchQueue.main.async {
-                for event in events {
-                    self.sendEvent(
-                        withName: PolarEvent.PolarAccData.rawValue,
-                        body: event
-                    )
-                }
-            }
-        }
-    }
-
     @objc(fetchAccData:bufferMs:)
     func fetchAccData(_ deviceId: String, bufferMs: NSNumber?) {
-        NSLog("PolarBridge: Fetch ACC Data called on: \(deviceId) bufferMs: \(bufferMs)")
-        let resolvedBufferMs: TimeInterval
-
-        if let number = bufferMs, !(number is NSNull) {
-          resolvedBufferMs = number.doubleValue >= 0 ? number.doubleValue : SENSOR_BUFFER_MS
-        } else {
-          resolvedBufferMs = SENSOR_BUFFER_MS
-        }
-        guard let api = api else {
-            NSLog("PolarBridge: Polar API not initialized")
-            return
-        }
-
-        // Stop existing ACC stream if running
-        if isAccStreaming {
-            disposeAccStream()
-            stopAccFlushTimer()
-            flushAccBuffer()
-            isAccStreaming = false
-
-            NSLog("PolarBridge: ACC Stream stopped")
-            sendEvent(withName: PolarEvent.PolarAccComplete.rawValue, body: ["message": "ACC Stream stopped"])
-            return
-        }
-
-        isAccStreaming = true
-        startAccFlushTimer(bufferMs: resolvedBufferMs)
-
-        accDisposable = requestStreamSettings(deviceId, feature: .acc)
-            .flatMap { settings in
-                api.startAccStreaming(deviceId, settings: settings).asObservable()
-            }
-            .observe(on: MainScheduler.instance)
-            .subscribe(
-                onNext: { [weak self] accData in
-                    guard let self = self else { return }
-
-                    self.accBufferQueue.async {
-                        for sample in accData {
-                            NSLog("ACC x: \(sample.x) y: \(sample.y) z: \(sample.z) timestamp: \(sample.timeStamp)")
-
-                            var event: [String: Any] = [:]
-                            event["accX"] = sample.x
-                            event["accY"] = sample.y
-                            event["accZ"] = sample.z
-                            event["accTimestamp"] = Double(sample.timeStamp)  // RN doesn’t support int64
-
-                            self.accBuffer.append(event)
-//                             self.sendEvent(withName: PolarEvent.PolarAccData.rawValue, body: event)
-                        }
-                    }
-                },
-                onError: { [weak self] error in
-                    guard let self = self else { return }
-
-                    self.stopAccFlushTimer()
-                    self.flushAccBuffer()
-                    self.isAccStreaming = false
-
-                    NSLog("PolarBridge: ACC stream failed: \(error.localizedDescription)")
-
-                    self.sendEvent(
-                        withName: PolarEvent.PolarAccError.rawValue,
-                        body: ["error": error.localizedDescription]
-                    )
-
-                    self.accDisposable = nil
-                },
-                onCompleted: { [weak self] in
-                    guard let self = self else { return }
-
-                    self.stopAccFlushTimer()
-                    self.flushAccBuffer()
-                    self.isAccStreaming = false
-
-                    NSLog("PolarBridge: ACC stream complete")
-
-                    self.sendEvent(
-                        withName: PolarEvent.PolarAccComplete.rawValue,
-                        body: ["message": "ACC stream complete"]
-                    )
-
-                    self.accDisposable = nil
-                }
-            )
-
-        accDisposable?.disposed(by: disposeBag)
-    }
-
-    private func startGyrFlushTimer(bufferMs: TimeInterval) {
-        stopGyrFlushTimer()
-        let intervalSeconds = bufferMs / 1000.0
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-
-            self.gyrFlushTimer = Timer(
-                timeInterval: intervalSeconds,
-                repeats: true
-            ) { [weak self] _ in
-                self?.flushGyrBuffer()
-            }
-
-            RunLoop.main.add(self.gyrFlushTimer!, forMode: .common)
-        }
-    }
-
-    private func stopGyrFlushTimer() {
-        DispatchQueue.main.async { [weak self] in
-            self?.gyrFlushTimer?.invalidate()
-            self?.gyrFlushTimer = nil
-        }
-    }
-
-    private func flushGyrBuffer() {
-        gyrBufferQueue.async { [weak self] in
-            guard let self = self else { return }
-            guard !self.gyrBuffer.isEmpty else { return }
-
-            let events = self.gyrBuffer
-            self.gyrBuffer.removeAll()
-
-            DispatchQueue.main.async {
-                for event in events {
-                    self.sendEvent(
-                        withName: PolarEvent.PolarGyrData.rawValue,
-                        body: event
-                    )
-                }
-            }
-        }
+        accManager?.fetchAccData(deviceId, bufferMs: bufferMs)
     }
 
     @objc(fetchGyrData:bufferMs:)
     func fetchGyrData(_ deviceId: String, bufferMs: NSNumber?) {
-        NSLog("PolarBridge: Fetch Gyroscope Data called on: \(deviceId) bufferMs: \(bufferMs)")
-        let resolvedBufferMs: TimeInterval
-
-        if let number = bufferMs, !(number is NSNull) {
-          resolvedBufferMs = number.doubleValue >= 0 ? number.doubleValue : SENSOR_BUFFER_MS
-        } else {
-          resolvedBufferMs = SENSOR_BUFFER_MS
-        }
-        guard let api = api else {
-            NSLog("PolarBridge: Polar API not initialized")
-            return
-        }
-
-        if isGyrStreaming {
-            disposeGyrStream()
-            stopGyrFlushTimer()
-            flushGyrBuffer()
-            isGyrStreaming = false
-
-            NSLog("PolarBridge: GYR Stream stopped")
-            sendEvent(withName: PolarEvent.PolarAccComplete.rawValue, body: ["message": "GYR Stream stopped"])
-            return
-        }
-
-        isGyrStreaming = true
-        startGyrFlushTimer(bufferMs: resolvedBufferMs)
-
-        gyrDisposable = requestStreamSettings(deviceId, feature: .gyro)
-            .flatMap { settings in
-                api.startGyroStreaming(deviceId, settings: settings).asObservable()
-            }
-            .observe(on: MainScheduler.instance)
-            .subscribe(
-                onNext: { [weak self] gyrData in
-                    guard let self = self else { return }
-
-                    self.gyrBufferQueue.async {
-                        for sample in gyrData {
-                            NSLog("GYR x: \(sample.x) y: \(sample.y) z: \(sample.z) timestamp: \(sample.timeStamp)")
-
-                            var event: [String: Any] = [:]
-
-                            // JS does NOT support Float — convert to String
-                            event["gyrX"] = "\(sample.x)"
-                            event["gyrY"] = "\(sample.y)"
-                            event["gyrZ"] = "\(sample.z)"
-
-                            // JS does NOT support Int64 — convert to Double
-                            event["gyrTimestamp"] = Double(sample.timeStamp)
-
-                            self.gyrBuffer.append(event)
-//                             self.sendEvent(
-//                                 withName: PolarEvent.PolarGyrData.rawValue,
-//                                 body: event
-//                             )
-                        }
-                    }
-                },
-                onError: { [weak self] error in
-                    guard let self = self else { return }
-
-                    stopGyrFlushTimer()
-                    flushGyrBuffer()
-                    isGyrStreaming = false
-
-                    NSLog("PolarBridge: GYR stream failed: \(error.localizedDescription)")
-
-                    self.sendEvent(
-                        withName: PolarEvent.PolarGyrError.rawValue,
-                        body: ["error": error.localizedDescription]
-                    )
-
-                    self.gyrDisposable = nil
-                },
-                onCompleted: { [weak self] in
-                    guard let self = self else { return }
-
-                    stopGyrFlushTimer()
-                    flushGyrBuffer()
-                    isGyrStreaming = false
-
-                    NSLog("PolarBridge: GYR stream complete")
-
-                    self.sendEvent(
-                        withName: PolarEvent.PolarGyrComplete.rawValue,
-                        body: ["message": "GYR stream complete"]
-                    )
-
-                    self.gyrDisposable = nil
-                }
-            )
-
-        gyrDisposable?.disposed(by: disposeBag)
-    }
-
-    private func startPpgFlushTimer(bufferMs: TimeInterval) {
-        stopPpgFlushTimer()
-        let intervalSeconds = bufferMs / 1000.0
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-
-            self.ppgFlushTimer = Timer(
-                timeInterval: intervalSeconds,
-                repeats: true
-            ) { [weak self] _ in
-                self?.flushPpgBuffer()
-            }
-
-            RunLoop.main.add(self.ppgFlushTimer!, forMode: .common)
-        }
-    }
-
-    private func stopPpgFlushTimer() {
-        DispatchQueue.main.async { [weak self] in
-            self?.ppgFlushTimer?.invalidate()
-            self?.ppgFlushTimer = nil
-        }
-    }
-
-    private func flushPpgBuffer() {
-        ppgBufferQueue.async { [weak self] in
-            guard let self = self else { return }
-            guard !self.ppgBuffer.isEmpty else { return }
-
-            let events = self.ppgBuffer
-            self.ppgBuffer.removeAll()
-
-            DispatchQueue.main.async {
-                for event in events {
-                    self.sendEvent(
-                        withName: PolarEvent.PolarPpgData.rawValue,
-                        body: event
-                    )
-                }
-            }
-        }
+        gyrManager?.fetchGyrData(deviceId, bufferMs: bufferMs)
     }
 
     @objc(fetchPpgData:bufferMs:)
     func fetchPpgData(_ deviceId: String, bufferMs: NSNumber?) {
-        NSLog("PolarBridge: Fetch PPG Data called on: \(deviceId) bufferMs: \(bufferMs)")
-        let resolvedBufferMs: TimeInterval
-
-        if let number = bufferMs, !(number is NSNull) {
-          resolvedBufferMs = number.doubleValue >= 0 ? number.doubleValue : SENSOR_BUFFER_MS
-        } else {
-          resolvedBufferMs = SENSOR_BUFFER_MS
-        }
-        guard let api = api else {
-            NSLog("PolarBridge: Polar API not initialized")
-            return
-        }
-
-        if isPpgStreaming {
-            disposePpgStream()
-            stopPpgFlushTimer()
-            flushPpgBuffer()
-            isPpgStreaming = false
-
-            NSLog("PolarBridge: PPG Stream stopped")
-            sendEvent(withName: PolarEvent.PolarAccComplete.rawValue, body: ["message": "PPG Stream stopped"])
-            return
-        }
-
-        isPpgStreaming = true
-        startPpgFlushTimer(bufferMs: resolvedBufferMs)
-
-        ppgDisposable = requestStreamSettings(deviceId, feature: .ppg)
-            .flatMap { settings in
-                api.startPpgStreaming(deviceId, settings: settings).asObservable()
-            }
-            .observe(on: MainScheduler.instance)
-            .subscribe(
-                onNext: { [weak self] ppgData in
-                    guard let self = self else { return }
-
-                    // Only handle PPG3_AMBIENT1 type (just like Kotlin)
-                    if ppgData.type == PpgDataType.ppg3_ambient1 {
-                        self.ppgBufferQueue.async {
-                            for sample in ppgData.samples {
-
-                                NSLog("PPG ppg0: \(sample.channelSamples[0]) ppg1: \(sample.channelSamples[1]) ppg2: \(sample.channelSamples[2]) ambient: \(sample.channelSamples[3]) ts: \(sample.timeStamp)")
-
-                                var event: [String: Any] = [:]
-
-                                // Float → String (React Native cannot handle Float)
-                                event["ppg0"] = "\(sample.channelSamples[0])"
-                                event["ppg1"] = "\(sample.channelSamples[1])"
-                                event["ppg2"] = "\(sample.channelSamples[2])"
-                                event["ambient"] = "\(sample.channelSamples[3])"
-
-                                // Int64 timestamp → Double
-                                event["ppgTimestamp"] = Double(sample.timeStamp)
-
-                                self.ppgBuffer.append(event)
-//                                 self.sendEvent(
-//                                     withName: PolarEvent.PolarPpgData.rawValue,
-//                                     body: event
-//                                 )
-                            }
-                        }
-                    }
-                },
-                onError: { [weak self] error in
-                    guard let self = self else { return }
-
-                    self.stopPpgFlushTimer()
-                    self.flushPpgBuffer()
-                    self.isPpgStreaming = false
-
-                    NSLog("PolarBridge: PPG stream failed: \(error.localizedDescription)")
-
-                    self.sendEvent(
-                        withName: PolarEvent.PolarPpgError.rawValue,
-                        body: ["error": error.localizedDescription]
-                    )
-
-                    self.ppgDisposable = nil
-                },
-                onCompleted: { [weak self] in
-                    guard let self = self else { return }
-
-                    self.stopPpgFlushTimer()
-                    self.flushPpgBuffer()
-                    self.isPpgStreaming = false
-
-                    NSLog("PolarBridge: PPG stream complete")
-
-                    self.sendEvent(
-                        withName: PolarEvent.PolarPpgComplete.rawValue,
-                        body: ["message": "PPG stream complete"]
-                    )
-
-                    self.ppgDisposable = nil
-                }
-            )
-
-        ppgDisposable?.disposed(by: disposeBag)
+        ppgManager?.fetchPpgData(deviceId, bufferMs: bufferMs)
     }
 
     @objc func disposeHrStream(){
@@ -606,18 +143,15 @@ class PolarBridge: RCTEventEmitter, ObservableObject
     }
 
     @objc func disposeAccStream(){
-        isAccStreaming = false
-        accDisposable?.dispose()
+        accManager?.disposeAccStream()
     }
 
     @objc func disposeGyrStream(){
-        isGyrStreaming = false
-        gyrDisposable?.dispose()
+        gyrManager?.disposeGyrStream()
     }
 
     @objc func disposePpgStream(){
-        isPpgStreaming = false
-        ppgDisposable?.dispose()
+        ppgManager?.disposePpgStream()
     }
 
     private func disposeAllStreams() {
