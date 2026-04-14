@@ -3,7 +3,9 @@ import {
   View,
   StyleSheet,
   Button,
-  Alert, ScrollView, Switch, NativeModules, NativeEventEmitter,
+  NativeModules,
+  NativeEventEmitter,
+  Alert, ScrollView, Switch,
 } from 'react-native';
 import {
   connectToDevice,
