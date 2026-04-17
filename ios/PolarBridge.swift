@@ -45,13 +45,6 @@ class PolarBridge: RCTEventEmitter, ObservableObject
     /// Flush interval for all sensor buffers (milliseconds)
     private let SENSOR_BUFFER_MS: TimeInterval = 10_000
 
-    @objc
-    func multiply(_ a: NSNumber,withB b: NSNumber) -> NSNumber {
-        let result = a.doubleValue * b.doubleValue
-        NSLog("Hello from Swift! Result: \(result)")
-        return NSNumber(value: result)
-    }
-
     override init() {
         super.init()
         api = PolarBleApiDefaultImpl.polarImplementation(DispatchQueue.main, features: [PolarBleSdkFeature.feature_hr,

@@ -31,12 +31,6 @@ class PolarBridgeModule(reactContext: ReactApplicationContext) :
     return NAME
   }
 
-  // Example method
-  // See https://reactnative.dev/docs/native-modules-android
-  override fun multiply(a: Double, b: Double): Double {
-    return a * b
-  }
-
   // ATTENTION! Replace with the device ID from your device.
   private var deviceId = "B4291522"
 

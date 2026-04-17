@@ -1,8 +1,8 @@
 import PolarBridge from './NativePolarBridge';
+import { NativeEventEmitter } from 'react-native';
 
-export function multiply(a: number, b: number): number {
-  return PolarBridge.multiply(a, b);
-}
+// Event emitter still works — TurboModules support RCTEventEmitter pattern
+export const polarEmitter = new NativeEventEmitter(PolarBridge as any);
 
 export function connectToDevice(deviceId: string) {
   return PolarBridge.connectToDevice(deviceId);
