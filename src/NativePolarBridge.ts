@@ -21,13 +21,19 @@ export interface Spec extends TurboModule {
   getDeviceTime(deviceId: string): Promise<DeviceTime>;
   setDeviceTime(deviceId: string): void;
   getDiskSpace(deviceId: string): Promise<DiskSpace>;
+  getBatteryLevel(deviceId: string): Promise<number>;
+  getChargerState(deviceId: string): Promise<string>;
 
   doFactoryReset(deviceId: string): void;
 
   // Offline recording
   startOfflineRecording(deviceId: string, features: string[]): Promise<any>;
   stopOfflineRecording(deviceId: string, features: string[]): Promise<any>;
-  setPolarRecordingTrigger(deviceId: string, recordingMode: number, features: string[]): void;
+  setPolarRecordingTrigger(
+    deviceId: string,
+    recordingMode: number,
+    features: string[]
+  ): void;
   fetchOfflineRecordings(deviceId: string): Promise<OfflineRecording[]>;
   downloadOfflineRecordings(deviceId: string): void;
   deleteAllOfflineRecordings(deviceId: string): void;

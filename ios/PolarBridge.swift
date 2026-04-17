@@ -154,6 +154,45 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         disposeAccStream()
     }
 
+    @objc(getBatteryLevel:resolver:rejecter:)
+    func getBatteryLevel(_ deviceId: String,
+        resolver resolve: @escaping RCTPromiseResolveBlock,
+        rejecter reject: @escaping RCTPromiseRejectBlock
+    ) {
+        guard let api = api else {
+            reject("UNCONFIGURED", "Polar API not initialized", nil)
+            return
+        }
+        do {
+            let batteryLevel = try api.getBatteryLevel(identifier: deviceId)
+            NSLog("PolarBridge Battery: \(batteryLevel)%")
+            let result: [String: Any] = ["batteryLevel": batteryLevel]
+            resolve(result)
+        } catch {
+            NSLog("PolarBridge Error getting battery level: \(error.localizedDescription)")
+        }
+
+    }
+
+    @objc(getChargerState:resolver:rejecter:)
+    func getChargerState(_ deviceId: String,
+        resolver resolve: @escaping RCTPromiseResolveBlock,
+        rejecter reject: @escaping RCTPromiseRejectBlock
+    ) {
+        guard let api = api else {
+            reject("UNCONFIGURED", "Polar API not initialized", nil)
+            return
+        }
+        do {
+            let chargerState = try api.getChargerState(identifier: deviceId)
+            NSLog("PolarBridge Charger State: \(chargerState)")
+            let result: [String: Any] = ["chargerState": "\(chargerState)"]
+            resolve(result)
+        } catch {
+            NSLog("PolarBridge Error getting charger state: \(error.localizedDescription)")
+        }
+    }
+
     @objc(setDeviceTime:)
     func setDeviceTime(_ deviceId: String) {
         NSLog("PolarBridge: Set device time for: \(deviceId)")

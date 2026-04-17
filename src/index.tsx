@@ -38,6 +38,14 @@ export function fetchPpgData(deviceId: string, bufferMs: number | null = null) {
   return PolarBridge.fetchPpgData(deviceId, safeBufferMs);
 }
 
+export function getBatteryLevel(deviceId: string){
+  return PolarBridge.getBatteryLevel(deviceId);
+}
+
+export function getChargerState(deviceId: string) {
+  return PolarBridge.getChargerState(deviceId);
+}
+
 export function enableSdkMode(deviceId: string) {
   return PolarBridge.enableSdkMode(deviceId);
 }

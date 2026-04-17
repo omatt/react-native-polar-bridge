@@ -31,7 +31,10 @@ import {
   downloadOfflineRecordings,
   startOfflineRecording,
   stopOfflineRecording,
+  getChargerState,
+  getBatteryLevel,
   polarEmitter,
+  doFactoryReset,
 } from 'react-native-polar-bridge';
 import { useEffect, useState } from 'react';
 
@@ -600,6 +603,34 @@ export default function App() {
         </View>
         <View style={styles.buttonContainer}>
           <Button
+            title="Get Battery Level"
+            onPress={() => {
+              if (connectedDeviceId != null) {
+                getBatteryLevel(connectedDeviceId).then((data) => {
+                  console.log('Polar battery level', `Result: ${data.batteryLevel}`);
+                });
+              } else {
+                displayDialogNoConnectedDevice();
+              }
+            }}
+          />
+        </View>
+        <View style={styles.buttonContainer}>
+          <Button
+            title="Get Battery State"
+            onPress={() => {
+              if (connectedDeviceId != null) {
+                getChargerState(connectedDeviceId).then((data) => {
+                  console.log('Polar charger state', `Result: ${data}`);
+                });
+              } else {
+                displayDialogNoConnectedDevice();
+              }
+            }}
+          />
+        </View>
+        <View style={styles.buttonContainer}>
+          <Button
             title='Set Device Time'
             onPress={() => {
               if (connectedDeviceId != null) {
@@ -716,6 +747,18 @@ export default function App() {
                 setPolarRecordingTrigger(connectedDeviceId,
                   OfflineRecordingTriggerMode.TRIGGER_DISABLED,
                   offlineRecordingFeatureList);
+              } else {
+                displayDialogNoConnectedDevice();
+              }
+            }}
+          />
+        </View>
+        <View style={styles.buttonContainer}>
+          <Button
+            title='Factory Reset'
+            onPress={() => {
+              if (connectedDeviceId != null) {
+                doFactoryReset(connectedDeviceId);
               } else {
                 displayDialogNoConnectedDevice();
               }

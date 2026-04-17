@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0C80B921A6F3F58F76C31292 /* libPods-PolarBridgeExample.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-PolarBridgeExample.a */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		448BCDD02F605B850075C557 /* polar_device_capabilities.json in Resources */ = {isa = PBXBuildFile; fileRef = 448BCDCF2F605B850075C557 /* polar_device_capabilities.json */; };
 		4CE4CB81346B4C558B7786B2 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
@@ -22,6 +23,7 @@
 		3B4392A12AC88292D35C810B /* Pods-PolarBridgeExample.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-PolarBridgeExample.debug.xcconfig"; path = "Target Support Files/Pods-PolarBridgeExample/Pods-PolarBridgeExample.debug.xcconfig"; sourceTree = "<group>"; };
 		441679BE2EC72537007A530B /* libPolarBridge.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; path = libPolarBridge.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		441679C02ECCBBD4007A530B /* PolarBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PolarBridge.swift; path = ../../ios/PolarBridge.swift; sourceTree = "<group>"; };
+		448BCDCF2F605B850075C557 /* polar_device_capabilities.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = polar_device_capabilities.json; sourceTree = "<group>"; };
 		5709B34CF0A7D63546082F79 /* Pods-PolarBridgeExample.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-PolarBridgeExample.release.xcconfig"; path = "Target Support Files/Pods-PolarBridgeExample/Pods-PolarBridgeExample.release.xcconfig"; sourceTree = "<group>"; };
 		5DCACB8F33CDC322A6C60F78 /* libPods-PolarBridgeExample.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-PolarBridgeExample.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = PolarBridgeExample/AppDelegate.swift; sourceTree = "<group>"; };
@@ -79,6 +81,7 @@
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 				BBD78D7AC51CEA395F1C20DB /* Pods */,
+				448BCDCF2F605B850075C557 /* polar_device_capabilities.json */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -162,6 +165,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				448BCDD02F605B850075C557 /* polar_device_capabilities.json in Resources */,
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				4CE4CB81346B4C558B7786B2 /* PrivacyInfo.xcprivacy in Resources */,
