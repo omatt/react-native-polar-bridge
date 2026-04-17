@@ -56,6 +56,52 @@ export default function App(){
 
 ```
 
+#### Handling Connection Failed
+
+The native Polar SDK does not throw an error if it is not able connect to the Polar device i.e. when the device is out of range or not powered on. 
+
+A timeout handler can be created to throw an error if the SDK is not able to connect to the device within the defined period. (Optional) The package [BackgroundTimer](https://www.npmjs.com/package/react-native-background-timer) can be used to be able to call `setTimeout()` even while the app is running background.
+
+```js
+const ERROR_BLE_TIMEOUT = 'ERROR_BLE_TIMEOUT';
+
+/**
+ * Set a timeout if there's no response received from Polar SDK connectToDevice. Default timeout is 10 seconds if not overriden.
+ */
+const connectWithTimeout = (promise, timeoutMs = 10000) => {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => {
+            BackgroundTimer.start();
+            BackgroundTimer.setTimeout(() => reject(new Error(ERROR_BLE_TIMEOUT)), timeoutMs);
+            BackgroundTimer.stop();
+        }),
+    ]);
+};
+```
+
+This can then be appled when connecting to the Polar device. After receiving the timeout error, call `disconnectFromDevice()` to terminate the active `connectToDevice()` process before starting the device connection process again.
+
+```js
+let connectedDevice;
+try {
+    connectedDevice = await connectWithTimeout(
+        connectToDevice(deviceId),
+        15000
+    );
+} catch (error) {
+    BackgroundTimer.start();
+    BackgroundTimer.setTimeout(() => {
+        disconnectFromDevice(deviceId);
+    }, 1000);
+    BackgroundTimer.stop();
+    throw error; // Handle timeout error
+}
+if(connectedDevice){
+    // Do function when the Polar device is connected
+}
+```
+
 ### Disconnecting from Device
 
 ```js
