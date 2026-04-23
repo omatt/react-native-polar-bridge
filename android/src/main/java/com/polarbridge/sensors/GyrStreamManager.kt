@@ -18,7 +18,7 @@ class GyrStreamManager(
   private var gyrDisposable: Disposable? = null
 
   fun fetchGyrData(deviceId: String, sensorSettings: SensorSettings, ms: Double?, sensorBufferMs: Long) {
-    Log.e(TAG, "Fetch Gyroscope Data called on: $deviceId ")
+    Log.d(TAG, "Fetch Gyroscope Data called on: $deviceId ")
     val bufferMs = ms?.toLong()?.takeIf { it >= 0 } ?: sensorBufferMs
     val isDisposed = gyrDisposable?.isDisposed ?: true
     try {
@@ -37,7 +37,7 @@ class GyrStreamManager(
               Log.d(TAG, "Flushing GYR buffer (${samples.size} samples)")
 
               for (data in samples) {
-                Log.d(TAG, "GYR    x: ${data.x} y: ${data.y} z: ${data.z} timeStamp: ${data.timeStamp}")
+                // Log.d(TAG, "GYR    x: ${data.x} y: ${data.y} z: ${data.z} timeStamp: ${data.timeStamp}")
 
                 val event: WritableMap = Arguments.createMap()
                 // Float not supported

@@ -19,7 +19,7 @@ class PpgStreamManager(
   private var ppgDisposable: Disposable? = null
 
   fun fetchPpgData(deviceId: String, sensorSettings: SensorSettings, ms: Double?, sensorBufferMs: Long) {
-    Log.e(TAG, "Fetch Photoplethysmograph Data called on: $deviceId ")
+    Log.d(TAG, "Fetch Photoplethysmograph Data called on: $deviceId ")
     val bufferMs = ms?.toLong()?.takeIf { it >= 0 } ?: sensorBufferMs
     val isDisposed = ppgDisposable?.isDisposed ?: true
     try {
@@ -39,7 +39,7 @@ class PpgStreamManager(
               Log.d(TAG, "Flushing PPG buffer (${samples.size} samples)")
 
               for (data in samples) {
-                Log.d(TAG, "PPG    ppg0: ${data.channelSamples[0]} ppg1: ${data.channelSamples[1]} ppg2: ${data.channelSamples[2]} ambient: ${data.channelSamples[3]} timeStamp: ${data.timeStamp}")
+                // Log.d(TAG, "PPG    ppg0: ${data.channelSamples[0]} ppg1: ${data.channelSamples[1]} ppg2: ${data.channelSamples[2]} ambient: ${data.channelSamples[3]} timeStamp: ${data.timeStamp}")
 
                 val event: WritableMap = Arguments.createMap()
                 // Float not supported
