@@ -1,6 +1,13 @@
 import type { TurboModule } from 'react-native';
 import { TurboModuleRegistry } from 'react-native';
-import type { DeviceConnected, DeviceTime, DiskSpace, OfflineRecording } from './PolarDataModel';
+import type {
+  BatteryLevel,
+  ChargerState,
+  DeviceConnected,
+  DeviceTime,
+  DiskSpace,
+  OfflineRecording,
+} from './PolarDataModel';
 
 export interface Spec extends TurboModule {
   connectToDevice(deviceId: string): Promise<DeviceConnected>;
@@ -21,8 +28,8 @@ export interface Spec extends TurboModule {
   getDeviceTime(deviceId: string): Promise<DeviceTime>;
   setDeviceTime(deviceId: string): void;
   getDiskSpace(deviceId: string): Promise<DiskSpace>;
-  getBatteryLevel(deviceId: string): Promise<number>;
-  getChargerState(deviceId: string): Promise<string>;
+  getBatteryLevel(deviceId: string): Promise<BatteryLevel>;
+  getChargerState(deviceId: string): Promise<ChargerState>;
 
   doFactoryReset(deviceId: string): void;
 

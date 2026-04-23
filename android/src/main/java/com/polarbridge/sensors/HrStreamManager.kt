@@ -18,7 +18,7 @@ class HrStreamManager(
   private var hrDisposable: Disposable? = null
 
   fun fetchHrData(deviceId: String, ms: Double?, sensorBufferMs: Long) {
-    Log.e(TAG, "Fetch Heart Data called on: $deviceId ")
+    Log.d(TAG, "Fetch Heart Data called on: $deviceId ")
 
     val bufferMs = ms?.toLong()?.takeIf { it >= 0 } ?: sensorBufferMs
     val isDisposed = hrDisposable?.isDisposed ?: true

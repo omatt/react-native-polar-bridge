@@ -3,8 +3,6 @@
 
 @interface RCT_EXTERN_MODULE(PolarBridge, RCTEventEmitter)
 
-RCT_EXTERN_METHOD(multiply:(nonnull NSNumber *)a withB:(nonnull NSNumber *)b)
-
 RCT_EXTERN_METHOD(connectToDevice:(NSString *)deviceId
                  resolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject)

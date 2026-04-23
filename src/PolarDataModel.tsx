@@ -66,5 +66,13 @@ export type OfflineRecording = {
 
 export type DeviceConnected = {
   connectedDeviceId: string;
-  batteryLevel : number;
+  batteryLevel: number;
+};
+
+export type BatteryLevel = {
+  batteryLevel: number;
+};
+
+export type ChargerState = {
+  chargerState: string;
 };

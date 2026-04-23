@@ -49,12 +49,17 @@ import {
   logPpgToCSV,
 } from './services/writer';
 import type {
-  AccData, DeviceConnected,
+  AccData,
+  BatteryLevel,
+  ChargerState,
+  DeviceConnected,
   DeviceTime,
   DiskSpace,
   GyrData,
-  HrData, OfflineRecording,
-  PpgData, ScannedDevice,
+  HrData,
+  OfflineRecording,
+  PpgData,
+  ScannedDevice,
 } from '../../src/PolarDataModel';
 import {checkPermission, requestPermissions} from "./utils/permissions_manager";
 
@@ -606,8 +611,8 @@ export default function App() {
             title="Get Battery Level"
             onPress={() => {
               if (connectedDeviceId != null) {
-                getBatteryLevel(connectedDeviceId).then((data) => {
-                  console.log('Polar battery level', `Result: ${data.batteryLevel}`);
+                getBatteryLevel(connectedDeviceId).then((result: BatteryLevel) => {
+                  console.log('Polar battery level', `Result: ${result.batteryLevel}`);
                 });
               } else {
                 displayDialogNoConnectedDevice();
@@ -620,8 +625,8 @@ export default function App() {
             title="Get Battery State"
             onPress={() => {
               if (connectedDeviceId != null) {
-                getChargerState(connectedDeviceId).then((data) => {
-                  console.log('Polar charger state', `Result: ${data}`);
+                getChargerState(connectedDeviceId).then((result: ChargerState) => {
+                  console.log('Polar charger state', `Result: ${result.chargerState}`);
                 });
               } else {
                 displayDialogNoConnectedDevice();
