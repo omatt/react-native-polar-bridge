@@ -98,6 +98,27 @@ useEffect(() => {
 }, []);
 ```
 
+
+### Battery Level
+
+Returns the battery level of the Polar device.
+
+```js
+getBatteryLevel(connectedDeviceId).then((result: BatteryLevel) => {
+  console.log('Polar battery level', `Result: ${result.batteryLevel}`);
+});
+```
+
+### Charger State
+
+Returns the charger state of the Polar device. Supported devices will return: CHARGING, DISCHARGING_ACTIVE, DISCHARGING_INACTIVE, else it will return [UNKNOWN](https://github.com/polarofficial/polar-ble-sdk/issues/799)
+
+```js
+getChargerState(connectedDeviceId).then((result: ChargerState) => {
+  console.log('Polar charger state', `Result: ${result.chargerState}`);
+});
+```
+
 ### Heart Rate Data Stream
 
 Ensure that the `deviceId` of the Polar device is connected before calling the function.
