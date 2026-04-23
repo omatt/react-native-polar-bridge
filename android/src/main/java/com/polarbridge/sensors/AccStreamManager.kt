@@ -18,7 +18,7 @@ class AccStreamManager(
   private var accDisposable: Disposable? = null
 
   fun fetchAccData(deviceId: String, sensorSettings: SensorSettings, ms: Double?, sensorBufferMs: Long) {
-    Log.e(TAG, "Fetch Accelerometer Data called on: $deviceId ")
+    Log.d(TAG, "Fetch Accelerometer Data called on: $deviceId ")
     val bufferMs = ms?.toLong()?.takeIf { it >= 0 } ?: sensorBufferMs
     val isDisposed = accDisposable?.isDisposed ?: true
     try{
@@ -36,7 +36,7 @@ class AccStreamManager(
               Log.d(TAG, "Flushing ACC buffer (${samples.size} samples)")
 
               for (data in samples) {
-                Log.d(TAG, "ACC    x: ${data.x} y: ${data.y} z: ${data.z} timeStamp: ${data.timeStamp}")
+                // Log.d(TAG, "ACC    x: ${data.x} y: ${data.y} z: ${data.z} timeStamp: ${data.timeStamp}")
 
                 val event: WritableMap = Arguments.createMap()
                 event.putInt("accX", data.x)

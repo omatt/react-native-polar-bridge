@@ -1,8 +1,11 @@
 import PolarBridge from './NativePolarBridge';
-import { NativeEventEmitter } from 'react-native';
+import { NativeEventEmitter, Platform } from 'react-native';
 
-// Event emitter still works — TurboModules support RCTEventEmitter pattern
-export const polarEmitter = new NativeEventEmitter(PolarBridge as any);
+// Migrated NativeEventEmitter, maintains TurboModule support for RCTEventEmitter pattern
+export const polarEmitter =
+  Platform.OS === 'android'
+    ? new NativeEventEmitter()
+    : new NativeEventEmitter(PolarBridge as any);
 
 export function connectToDevice(deviceId: string) {
   return PolarBridge.connectToDevice(deviceId);
