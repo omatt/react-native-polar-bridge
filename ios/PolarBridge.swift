@@ -43,6 +43,13 @@ class PolarBridge: RCTEventEmitter, ObservableObject
     /// Flush interval for all sensor buffers (milliseconds)
     private let SENSOR_BUFFER_MS: TimeInterval = 10_000
 
+    // Track whether React Native is actively listening
+    private var hasListeners = false
+
+    // Queue to hold events while React Native is disconnected/unsubscribed
+    private var pendingEvents: [(name: String, body: Any)] = []
+    private let queueLock = NSLock() // Ensures thread safety during queue operations
+
     override init() {
         super.init()
         api = PolarBleApiDefaultImpl.polarImplementation(
@@ -66,6 +73,19 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         accManager = AccStreamManager(api: api, bridge: self)
         gyrManager = GyrStreamManager(api: api, bridge: self)
         ppgManager = PpgStreamManager(api: api, bridge: self)
+    }
+
+    // Called by React Native when a listener is added
+    override func startObserving() {
+        NSLog("PolarBridge: startObserving")
+        hasListeners = true
+        flushPendingEvents()
+    }
+
+    // Called by React Native when all listeners are removed
+    override func stopObserving() {
+        NSLog("PolarBridge: stopObserving")
+        hasListeners = false
     }
 
     private func setObservers() {
@@ -313,9 +333,42 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         }
     }
 
-    // Emit events
-    override func sendEvent(withName name: String!, body: Any!) {
+    /// Helper method to safely invoke super.sendEvent on instance
+    private func emitToSuper(name: String, body: Any) {
         super.sendEvent(withName: name, body: body)
+    }
+
+    /// Overridden sendEvent to intercept events when JS isn't listening
+    override func sendEvent(withName name: String!, body: Any!) {
+        queueLock.lock()
+        defer { queueLock.unlock() }
+
+        if hasListeners {
+            super.sendEvent(withName: name, body: body)
+        } else {
+            NSLog("PolarBridge: Buffer queued event '\(name ?? "")' (JS listener inactive)")
+            pendingEvents.append((name: name, body: body))
+        }
+    }
+
+    /// Flushes queued events once React Native subscribes
+    private func flushPendingEvents() {
+        queueLock.lock()
+        let eventsToFlush = pendingEvents
+        pendingEvents.removeAll()
+        queueLock.unlock()
+
+        guard !eventsToFlush.isEmpty else { return }
+
+        NSLog("PolarBridge: Flushing \(eventsToFlush.count) buffered events to JS")
+
+        // Dispatch to main queue to safely emit to React Native bridge
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, self.hasListeners else { return }
+            for event in eventsToFlush {
+                self.emitToSuper(name: event.name, body: event.body)
+            }
+        }
     }
 
     override func supportedEvents() -> [String]! {
@@ -351,7 +404,7 @@ class PolarBridge: RCTEventEmitter, ObservableObject
             guard let self = self else { return }
             do {
                 for try await polarDeviceInfo in api.searchForDevice() {
-                    if Task.isCancelled { break }
+//                     if Task.isCancelled { break }
                     NSLog("PolarBridge: Device found \(polarDeviceInfo.deviceId)")
 
                     let device: [String: Any] = [
