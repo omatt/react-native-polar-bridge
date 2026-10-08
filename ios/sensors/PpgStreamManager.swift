@@ -1,6 +1,5 @@
 import Foundation
 import PolarBleSdk
-import RxSwift
 import React
 
 class PpgStreamManager {
@@ -8,7 +7,7 @@ class PpgStreamManager {
     private weak var bridge: PolarBridge?
     private var api: PolarBleApi?
 
-    private var ppgDisposable: Disposable?
+    private var ppgTask: Task<Void, Never>?
     private var isPpgStreaming = false
 
     private var ppgBuffer: [[String: Any]] = []
@@ -16,7 +15,6 @@ class PpgStreamManager {
     private var ppgFlushTimer: Timer?
 
     private let SENSOR_BUFFER_MS: TimeInterval = 10_000
-    private let disposeBag = DisposeBag()
 
     init(api: PolarBleApi?, bridge: PolarBridge) {
         self.api = api
@@ -61,23 +59,19 @@ class PpgStreamManager {
         isPpgStreaming = true
         startPpgFlushTimer(bufferMs: resolvedBufferMs)
 
-        ppgDisposable = SensorSettings.requestStreamSettings(
-                api: api,
-                identifier: deviceId,
-                feature: .ppg
-            )
-            .flatMap { settings in
-                api.startPpgStreaming(deviceId, settings: settings).asObservable()
-            }
-            .observe(on: MainScheduler.instance)
-            .subscribe(
-                onNext: { [weak self] ppgData in
-                    guard let self = self else { return }
+        ppgTask = Task { @MainActor [weak self] in
+            guard let self = self else { return }
+
+            do {
+                let settings = try await api.requestStreamSettings(deviceId, feature: .ppg)
+                let stream = api.startPpgStreaming(deviceId, settings: settings)
+
+                for try await ppgData in stream {
+                    if Task.isCancelled { break }
 
                     if ppgData.type == PpgDataType.ppg3_ambient1 {
                         self.ppgBufferQueue.async {
                             for sample in ppgData.samples {
-
                                 var event: [String: Any] = [:]
 
                                 event["ppg0"] = "\(sample.channelSamples[0])"
@@ -91,43 +85,37 @@ class PpgStreamManager {
                             }
                         }
                     }
-                },
-                onError: { [weak self] error in
-                    guard let self = self else { return }
-
-                    self.stopPpgFlushTimer()
-                    self.flushPpgBuffer()
-                    self.isPpgStreaming = false
-
-                    self.bridge?.sendEvent(
-                        withName: PolarEvent.PolarPpgError.rawValue,
-                        body: ["error": error.localizedDescription]
-                    )
-
-                    self.ppgDisposable = nil
-                },
-                onCompleted: { [weak self] in
-                    guard let self = self else { return }
-
-                    self.stopPpgFlushTimer()
-                    self.flushPpgBuffer()
-                    self.isPpgStreaming = false
-
-                    self.bridge?.sendEvent(
-                        withName: PolarEvent.PolarPpgComplete.rawValue,
-                        body: ["message": "PPG stream complete"]
-                    )
-
-                    self.ppgDisposable = nil
                 }
-            )
 
-        ppgDisposable?.disposed(by: disposeBag)
+                self.stopPpgFlushTimer()
+                self.flushPpgBuffer()
+                self.isPpgStreaming = false
+
+                self.bridge?.sendEvent(
+                    withName: PolarEvent.PolarPpgComplete.rawValue,
+                    body: ["message": "PPG stream complete"]
+                )
+
+                self.ppgTask = nil
+            } catch {
+                self.stopPpgFlushTimer()
+                self.flushPpgBuffer()
+                self.isPpgStreaming = false
+
+                self.bridge?.sendEvent(
+                    withName: PolarEvent.PolarPpgError.rawValue,
+                    body: ["error": error.localizedDescription]
+                )
+
+                self.ppgTask = nil
+            }
+        }
     }
 
     func disposePpgStream() {
         isPpgStreaming = false
-        ppgDisposable?.dispose()
+        ppgTask?.cancel()
+        ppgTask = nil
     }
 
     // MARK: - Buffer

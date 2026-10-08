@@ -1,6 +1,5 @@
 import Foundation
 import PolarBleSdk
-import RxSwift
 
 class SensorSettings {
 
@@ -8,40 +7,44 @@ class SensorSettings {
         api: PolarBleApi?,
         identifier: String,
         feature: PolarDeviceDataType
-    ) -> Observable<PolarSensorSetting> {
+    ) async throws -> PolarSensorSetting {
 
         guard let api = api else {
-            return Observable.error(NSError(
+            throw NSError(
                 domain: "SensorSettings",
                 code: -1,
                 userInfo: [NSLocalizedDescriptionKey: "Polar API not initialized"]
-            ))
+            )
         }
 
-        let availableSettings = api.requestStreamSettings(identifier, feature: feature)
+        let availableSettings = try await api.requestStreamSettings(
+            identifier,
+            feature: feature
+        )
 
-        let allSettings = api.requestFullStreamSettings(identifier, feature: feature)
-            .catch { error in
-                NSLog("Full stream settings NOT available for \(feature). Reason: \(error.localizedDescription)")
-                return Single.just(try PolarSensorSetting([:]))
-            }
+        let allSettings: PolarSensorSetting
 
-        return Single.zip(availableSettings, allSettings)
-            .flatMap { available, all -> Single<PolarSensorSetting> in
+        do {
+            allSettings = try await api.requestFullStreamSettings(
+                identifier,
+                feature: feature
+            )
+        } catch {
+            NSLog("Full stream settings NOT available for \(feature). Reason: \(error.localizedDescription)")
+            allSettings = try PolarSensorSetting([:])
+        }
 
-                if available.settings.isEmpty {
-                    return Single.error(NSError(
-                        domain: "SensorSettings",
-                        code: -2,
-                        userInfo: [NSLocalizedDescriptionKey: "Settings are not available"]
-                    ))
-                }
+        if availableSettings.settings.isEmpty {
+            throw NSError(
+                domain: "SensorSettings",
+                code: -2,
+                userInfo: [NSLocalizedDescriptionKey: "Settings are not available"]
+            )
+        }
 
-                NSLog("Feature \(feature) available settings: \(available.settings)")
-                NSLog("Feature \(feature) all settings: \(all.settings)")
+        NSLog("Feature \(feature) available settings: \(availableSettings.settings)")
+        NSLog("Feature \(feature) all settings: \(allSettings.settings)")
 
-                return Single.just(available)
-            }
-            .asObservable()
+        return availableSettings
     }
 }

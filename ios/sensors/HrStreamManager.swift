@@ -1,6 +1,5 @@
 import Foundation
 import PolarBleSdk
-import RxSwift
 import React
 
 class HrStreamManager {
@@ -8,7 +7,7 @@ class HrStreamManager {
     private weak var bridge: PolarBridge?
     private var api: PolarBleApi?
 
-    private var hrDisposable: Disposable?
+    private var hrTask: Task<Void, Never>?
     private var isHrStreaming = false
 
     private var hrBuffer: [[String: Any]] = []
@@ -16,7 +15,6 @@ class HrStreamManager {
     private var hrFlushTimer: Timer?
 
     private let SENSOR_BUFFER_MS: TimeInterval = 10_000
-    private let disposeBag = DisposeBag()
 
     init(api: PolarBleApi?, bridge: PolarBridge) {
         self.api = api
@@ -57,11 +55,14 @@ class HrStreamManager {
         isHrStreaming = true
         startHrFlushTimer(bufferMs: resolvedBufferMs)
 
-        hrDisposable = api.startHrStreaming(deviceId)
-            .observe(on: MainScheduler.instance)
-            .subscribe(
-                onNext: { [weak self] hrData in
-                    guard let self = self else { return }
+        hrTask = Task { @MainActor [weak self] in
+            guard let self = self else { return }
+
+            do {
+                let stream = api.startHrStreaming(deviceId)
+
+                for try await hrData in stream {
+                    if Task.isCancelled { break }
 
                     self.hrBufferQueue.async {
                         for sample in hrData {
@@ -76,39 +77,37 @@ class HrStreamManager {
                             self.hrBuffer.append(event)
                         }
                     }
-                },
-                onError: { [weak self] error in
-                    guard let self = self else { return }
-
-                    self.stopHrFlushTimer()
-                    self.flushHrBuffer()
-                    self.isHrStreaming = false
-
-                    self.bridge?.sendEvent(
-                        withName: PolarEvent.PolarHrError.rawValue,
-                        body: ["error": error.localizedDescription]
-                    )
-                },
-                onCompleted: { [weak self] in
-                    guard let self = self else { return }
-
-                    self.stopHrFlushTimer()
-                    self.flushHrBuffer()
-                    self.isHrStreaming = false
-
-                    self.bridge?.sendEvent(
-                        withName: PolarEvent.PolarHrComplete.rawValue,
-                        body: ["message": "HR stream complete"]
-                    )
                 }
-            )
 
-        hrDisposable?.disposed(by: disposeBag)
+                self.stopHrFlushTimer()
+                self.flushHrBuffer()
+                self.isHrStreaming = false
+
+                self.bridge?.sendEvent(
+                    withName: PolarEvent.PolarHrComplete.rawValue,
+                    body: ["message": "HR stream complete"]
+                )
+
+                self.hrTask = nil
+            } catch {
+                self.stopHrFlushTimer()
+                self.flushHrBuffer()
+                self.isHrStreaming = false
+
+                self.bridge?.sendEvent(
+                    withName: PolarEvent.PolarHrError.rawValue,
+                    body: ["error": error.localizedDescription]
+                )
+
+                self.hrTask = nil
+            }
+        }
     }
 
     func disposeHrStream() {
         isHrStreaming = false
-        hrDisposable?.dispose()
+        hrTask?.cancel()
+        hrTask = nil
     }
 
     // MARK: - Buffer

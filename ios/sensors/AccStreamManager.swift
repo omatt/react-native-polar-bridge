@@ -1,6 +1,5 @@
 import Foundation
 import PolarBleSdk
-import RxSwift
 import React
 
 class AccStreamManager {
@@ -8,7 +7,7 @@ class AccStreamManager {
     private weak var bridge: PolarBridge?
     private var api: PolarBleApi?
 
-    private var accDisposable: Disposable?
+    private var accTask: Task<Void, Never>?
     private var isAccStreaming = false
 
     private var accBuffer: [[String: Any]] = []
@@ -16,7 +15,6 @@ class AccStreamManager {
     private var accFlushTimer: Timer?
 
     private let SENSOR_BUFFER_MS: TimeInterval = 10_000
-    private let disposeBag = DisposeBag()
 
     init(api: PolarBleApi?, bridge: PolarBridge) {
         self.api = api
@@ -56,18 +54,15 @@ class AccStreamManager {
         isAccStreaming = true
         startAccFlushTimer(bufferMs: resolvedBufferMs)
 
-        accDisposable = SensorSettings.requestStreamSettings(
-                api: api,
-                identifier: deviceId,
-                feature: .acc
-            )
-            .flatMap { settings in
-                api.startAccStreaming(deviceId, settings: settings).asObservable()
-            }
-            .observe(on: MainScheduler.instance)
-            .subscribe(
-                onNext: { [weak self] accData in
-                    guard let self = self else { return }
+        accTask = Task { @MainActor [weak self] in
+            guard let self = self else { return }
+
+            do {
+                let settings = try await api.requestStreamSettings(deviceId, feature: .acc)
+                let stream = api.startAccStreaming(deviceId, settings: settings)
+
+                for try await accData in stream {
+                    if Task.isCancelled { break }
 
                     self.accBufferQueue.async {
                         for sample in accData {
@@ -80,43 +75,37 @@ class AccStreamManager {
                             self.accBuffer.append(event)
                         }
                     }
-                },
-                onError: { [weak self] error in
-                    guard let self = self else { return }
-
-                    self.stopAccFlushTimer()
-                    self.flushAccBuffer()
-                    self.isAccStreaming = false
-
-                    self.bridge?.sendEvent(
-                        withName: PolarEvent.PolarAccError.rawValue,
-                        body: ["error": error.localizedDescription]
-                    )
-
-                    self.accDisposable = nil
-                },
-                onCompleted: { [weak self] in
-                    guard let self = self else { return }
-
-                    self.stopAccFlushTimer()
-                    self.flushAccBuffer()
-                    self.isAccStreaming = false
-
-                    self.bridge?.sendEvent(
-                        withName: PolarEvent.PolarAccComplete.rawValue,
-                        body: ["message": "ACC stream complete"]
-                    )
-
-                    self.accDisposable = nil
                 }
-            )
 
-        accDisposable?.disposed(by: disposeBag)
+                self.stopAccFlushTimer()
+                self.flushAccBuffer()
+                self.isAccStreaming = false
+
+                self.bridge?.sendEvent(
+                    withName: PolarEvent.PolarAccComplete.rawValue,
+                    body: ["message": "ACC stream complete"]
+                )
+
+                self.accTask = nil
+            } catch {
+                self.stopAccFlushTimer()
+                self.flushAccBuffer()
+                self.isAccStreaming = false
+
+                self.bridge?.sendEvent(
+                    withName: PolarEvent.PolarAccError.rawValue,
+                    body: ["error": error.localizedDescription]
+                )
+
+                self.accTask = nil
+            }
+        }
     }
 
     func disposeAccStream() {
         isAccStreaming = false
-        accDisposable?.dispose()
+        accTask?.cancel()
+        accTask = nil
     }
 
     // MARK: - Buffer

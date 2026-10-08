@@ -1,6 +1,5 @@
 import Foundation
 import PolarBleSdk
-import RxSwift
 import React
 
 class GyrStreamManager {
@@ -8,7 +7,7 @@ class GyrStreamManager {
     private weak var bridge: PolarBridge?
     private var api: PolarBleApi?
 
-    private var gyrDisposable: Disposable?
+    private var gyrTask: Task<Void, Never>?
     private var isGyrStreaming = false
 
     private var gyrBuffer: [[String: Any]] = []
@@ -16,7 +15,6 @@ class GyrStreamManager {
     private var gyrFlushTimer: Timer?
 
     private let SENSOR_BUFFER_MS: TimeInterval = 10_000
-    private let disposeBag = DisposeBag()
 
     init(api: PolarBleApi?, bridge: PolarBridge) {
         self.api = api
@@ -56,18 +54,15 @@ class GyrStreamManager {
         isGyrStreaming = true
         startGyrFlushTimer(bufferMs: resolvedBufferMs)
 
-        gyrDisposable = SensorSettings.requestStreamSettings(
-                api: api,
-                identifier: deviceId,
-                feature: .gyro
-            )
-            .flatMap { settings in
-                api.startGyroStreaming(deviceId, settings: settings).asObservable()
-            }
-            .observe(on: MainScheduler.instance)
-            .subscribe(
-                onNext: { [weak self] gyrData in
-                    guard let self = self else { return }
+        gyrTask = Task { @MainActor [weak self] in
+            guard let self = self else { return }
+
+            do {
+                let settings = try await api.requestStreamSettings(deviceId, feature: .gyro)
+                let stream = api.startGyroStreaming(deviceId, settings: settings)
+
+                for try await gyrData in stream {
+                    if Task.isCancelled { break }
 
                     self.gyrBufferQueue.async {
                         for sample in gyrData {
@@ -80,43 +75,37 @@ class GyrStreamManager {
                             self.gyrBuffer.append(event)
                         }
                     }
-                },
-                onError: { [weak self] error in
-                    guard let self = self else { return }
-
-                    self.stopGyrFlushTimer()
-                    self.flushGyrBuffer()
-                    self.isGyrStreaming = false
-
-                    self.bridge?.sendEvent(
-                        withName: PolarEvent.PolarGyrError.rawValue,
-                        body: ["error": error.localizedDescription]
-                    )
-
-                    self.gyrDisposable = nil
-                },
-                onCompleted: { [weak self] in
-                    guard let self = self else { return }
-
-                    self.stopGyrFlushTimer()
-                    self.flushGyrBuffer()
-                    self.isGyrStreaming = false
-
-                    self.bridge?.sendEvent(
-                        withName: PolarEvent.PolarGyrComplete.rawValue,
-                        body: ["message": "GYR stream complete"]
-                    )
-
-                    self.gyrDisposable = nil
                 }
-            )
 
-        gyrDisposable?.disposed(by: disposeBag)
+                self.stopGyrFlushTimer()
+                self.flushGyrBuffer()
+                self.isGyrStreaming = false
+
+                self.bridge?.sendEvent(
+                    withName: PolarEvent.PolarGyrComplete.rawValue,
+                    body: ["message": "GYR stream complete"]
+                )
+
+                self.gyrTask = nil
+            } catch {
+                self.stopGyrFlushTimer()
+                self.flushGyrBuffer()
+                self.isGyrStreaming = false
+
+                self.bridge?.sendEvent(
+                    withName: PolarEvent.PolarGyrError.rawValue,
+                    body: ["error": error.localizedDescription]
+                )
+
+                self.gyrTask = nil
+            }
+        }
     }
 
     func disposeGyrStream() {
         isGyrStreaming = false
-        gyrDisposable?.dispose()
+        gyrTask?.cancel()
+        gyrTask = nil
     }
 
     // MARK: - Buffer

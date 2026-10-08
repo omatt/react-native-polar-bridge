@@ -1,7 +1,6 @@
 import CoreBluetooth
 import PolarBleSdk
 import React
-import RxSwift
 
 enum PolarEvent: String, CaseIterable {
     case onDeviceFound
@@ -35,26 +34,31 @@ class PolarBridge: RCTEventEmitter, ObservableObject
     private var pendingResolver: RCTPromiseResolveBlock?
     private var pendingRejecter: RCTPromiseRejectBlock?
 
-    private var scanDisposable: Disposable?
+    private var scanTask: Task<Void, Never>?
     private var hrManager: HrStreamManager?
     private var accManager: AccStreamManager?
     private var gyrManager: GyrStreamManager?
     private var ppgManager: PpgStreamManager?
-    private let disposeBag = DisposeBag()
 
     /// Flush interval for all sensor buffers (milliseconds)
     private let SENSOR_BUFFER_MS: TimeInterval = 10_000
 
     override init() {
         super.init()
-        api = PolarBleApiDefaultImpl.polarImplementation(DispatchQueue.main, features: [PolarBleSdkFeature.feature_hr,
-                                                                                          PolarBleSdkFeature.feature_polar_sdk_mode,
-                                                                                          PolarBleSdkFeature.feature_battery_info,
-                                                                                          PolarBleSdkFeature.feature_device_info,
-                                                                                          PolarBleSdkFeature.feature_polar_online_streaming,
-                                                                                          PolarBleSdkFeature.feature_polar_offline_recording,
-                                                                                          PolarBleSdkFeature.feature_polar_device_time_setup,
-                                                                                          PolarBleSdkFeature.feature_polar_h10_exercise_recording])
+        api = PolarBleApiDefaultImpl.polarImplementation(
+            DispatchQueue.main,
+            features: [
+                .feature_hr,
+                .feature_polar_sdk_mode,
+                .feature_battery_info,
+                .feature_device_info,
+                .feature_polar_online_streaming,
+                .feature_polar_offline_recording,
+                .feature_polar_device_time_setup,
+                .feature_polar_h10_exercise_recording
+            ],
+            restoreIdentifier: "PolarBleSdkRestoreId"
+        )
 
         setObservers()
         // Initialize stream managers
@@ -206,17 +210,15 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         let timeZone = TimeZone.current
         NSLog("PolarBridge: Set device: \(deviceId) time to \(now)")
 
-        api.setLocalTime(deviceId, time: now, zone: timeZone)
-            .observe(on: MainScheduler.instance)
-            .subscribe(
-                onCompleted: {
-                    let timeSetString = "Time \(now) set to device"
-                    NSLog("PolarBridge: \(timeSetString)")
-                },
-                onError: { error in
-                    NSLog("PolarBridge: Set time failed: \(error.localizedDescription)")
-                }
-            )
+        Task { @MainActor in
+            do {
+                try await api.setLocalTime(deviceId, time: now, zone: timeZone)
+                let timeSetString = "Time \(now) set to device"
+                NSLog("PolarBridge: \(timeSetString)")
+            } catch {
+                NSLog("PolarBridge: Set time failed: \(error.localizedDescription)")
+            }
+        }
     }
 
     @objc(getDeviceTime:resolver:rejecter:)
@@ -232,26 +234,23 @@ class PolarBridge: RCTEventEmitter, ObservableObject
             return
         }
 
-        api.getLocalTime(deviceId)
-            .observe(on: MainScheduler.instance)
-            .subscribe(
-                onSuccess: { date in
-                    let timeGetString = "\(date) read from the device"
-                    NSLog("PolarBridge: \(timeGetString)")
+        Task { @MainActor in
+            do {
+                let date = try await api.getLocalTime(deviceId)
+                let timeGetString = "\(date) read from the device"
+                NSLog("PolarBridge: \(timeGetString)")
 
-                    let result: [String: Any] = [
-                        "time": "\(date)",
-                        "timeMs": Double(date.timeIntervalSince1970 * 1000)
-                    ]
+                let result: [String: Any] = [
+                    "time": "\(date)",
+                    "timeMs": Double(date.timeIntervalSince1970 * 1000)
+                ]
 
-                    resolve(result)
-                },
-                onFailure: { error in
-                    NSLog("PolarBridge: Get time failed: \(error.localizedDescription)")
-                    reject("GET_DEVICE_TIME_ERROR", "Failed to get device time", error)
-                }
-            )
-            .disposed(by: disposeBag)
+                resolve(result)
+            } catch {
+                NSLog("PolarBridge: Get time failed: \(error.localizedDescription)")
+                reject("GET_DEVICE_TIME_ERROR", "Failed to get device time", error)
+            }
+        }
     }
 
     @objc(getDiskSpace:resolver:rejecter:)
@@ -267,25 +266,23 @@ class PolarBridge: RCTEventEmitter, ObservableObject
             return
         }
 
-        api.getDiskSpace(deviceId)
-            .observe(on: MainScheduler.instance)
-            .subscribe(
-                onSuccess: { diskSpace in
-                    NSLog("Disk space left: \(diskSpace.freeSpace)/\(diskSpace.totalSpace) Bytes")
+        Task { @MainActor in
+            do {
+                let diskSpace = try await api.getDiskSpace(deviceId)
+                NSLog("Disk space left: \(diskSpace.freeSpace)/\(diskSpace.totalSpace) Bytes")
 
-                    // React Native doesn't support Int64: convert to Double
-                    let result: [String: Any] = [
-                        "freeSpace": Double(diskSpace.freeSpace),
-                        "totalSpace": Double(diskSpace.totalSpace)
-                    ]
+                // React Native doesn't support Int64: convert to Double
+                let result: [String: Any] = [
+                    "freeSpace": Double(diskSpace.freeSpace),
+                    "totalSpace": Double(diskSpace.totalSpace)
+                ]
 
-                    resolve(result)
-                },
-                onFailure: { error in
-                    NSLog("Get disk space failed: \(error.localizedDescription)")
-                    reject("GET_DISK_SPACE_ERROR", "Failed to get device disk space", error)
-                }
-            )
+                resolve(result)
+            } catch {
+                NSLog("Get disk space failed: \(error.localizedDescription)")
+                reject("GET_DISK_SPACE_ERROR", "Failed to get device disk space", error)
+            }
+        }
     }
 
     @objc(doFactoryReset:)
@@ -297,16 +294,14 @@ class PolarBridge: RCTEventEmitter, ObservableObject
             return
         }
 
-        api.doFactoryReset(deviceId, preservePairingInformation: true)
-            .observe(on: MainScheduler.instance)
-            .subscribe(
-                onCompleted: {
-                    NSLog("PolarBridge: send do factory reset to device")
-                },
-                onError: { error in
-                    NSLog("PolarBridge: do factory reset failed: \(error.localizedDescription)")
-                }
-            )
+        Task { @MainActor in
+            do {
+                try await api.doFactoryReset(deviceId, preservePairingInformation: true)
+                NSLog("PolarBridge: send do factory reset to device")
+            } catch {
+                NSLog("PolarBridge: do factory reset failed: \(error.localizedDescription)")
+            }
+        }
     }
 
     // Returns promise for connecting to the device
@@ -335,15 +330,15 @@ class PolarBridge: RCTEventEmitter, ObservableObject
         NSLog("PolarBridge: Scan Devices triggered")
 
         // If already scanning, stop and complete
-        if let disposable = scanDisposable {
-            disposable.dispose()
-            scanDisposable = nil
+        if scanTask != nil {
+            scanTask?.cancel()
+            scanTask = nil
             NSLog("PolarBridge: Scan stopped")
             sendEvent(withName: PolarEvent.onScanComplete.rawValue, body: ["message": "Scan stopped"])
             return
         } else {
-          // scanDisposable is nil
-          NSLog("PolarBridge: No active scan")
+            // scanDisposable is nil
+            NSLog("PolarBridge: No active scan")
         }
 
         guard let api = api else {
@@ -351,37 +346,32 @@ class PolarBridge: RCTEventEmitter, ObservableObject
             return
         }
 
-        // Start scanning
-        scanDisposable = api.searchForDevice()
-            .observe(on: MainScheduler.instance)
-            .subscribe(
-                onNext: { [weak self] polarDeviceInfo in
-                    guard let self = self else { return }
+        // Start scanning using Swift Concurrency Task
+        scanTask = Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            do {
+                for try await polarDeviceInfo in api.searchForDevice() {
+                    if Task.isCancelled { break }
                     NSLog("PolarBridge: Device found \(polarDeviceInfo.deviceId)")
 
                     let device: [String: Any] = [
                         "deviceId": polarDeviceInfo.deviceId,
-                        "address": polarDeviceInfo.address ?? "",
+                        "address": polarDeviceInfo.address,
                         "rssi": polarDeviceInfo.rssi,
-                        "name": polarDeviceInfo.name ?? "",
+                        "name": polarDeviceInfo.name,
                         "isConnectable": polarDeviceInfo.connectable
                     ]
 
                     self.sendEvent(withName: PolarEvent.onDeviceFound.rawValue, body: device)
-                },
-                onError: { [weak self] error in
-                    guard let self = self else { return }
-                    NSLog("PolarBridge: Scan failed \(error.localizedDescription)")
-                    self.sendEvent(withName: PolarEvent.onScanError.rawValue, body: ["message": error.localizedDescription])
-                },
-                onCompleted: { [weak self] in
-                    guard let self = self else { return }
-                    NSLog("PolarBridge: Scan complete")
-                    self.sendEvent(withName: PolarEvent.onScanComplete.rawValue, body: ["message": "Scan complete"])
                 }
-            )
-
-        scanDisposable?.disposed(by: disposeBag)
+                NSLog("PolarBridge: Scan complete")
+                self.sendEvent(withName: PolarEvent.onScanComplete.rawValue, body: ["message": "Scan complete"])
+            } catch {
+                NSLog("PolarBridge: Scan failed \(error.localizedDescription)")
+                self.sendEvent(withName: PolarEvent.onScanError.rawValue, body: ["message": error.localizedDescription])
+            }
+            self.scanTask = nil
+        }
     }
 }
 
