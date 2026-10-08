@@ -45,6 +45,12 @@ class PolarBridge: RCTEventEmitter, ObservableObject
     /// Flush interval for all sensor buffers (milliseconds)
     private let SENSOR_BUFFER_MS: TimeInterval = 10_000
 
+    // MARK: - In-Memory Buffering Properties
+    private var hasListeners = false
+    private var pendingEvents: [(name: String, body: Any)] = []
+    private let queueLock = NSLock()
+    private let MAX_BUFFER_COUNT = 5_000
+
     override init() {
         super.init()
         api = PolarBleApiDefaultImpl.polarImplementation(DispatchQueue.main, features: [PolarBleSdkFeature.feature_hr,
@@ -70,6 +76,56 @@ class PolarBridge: RCTEventEmitter, ObservableObject
 //         api?.powerStateObserver = self
 //         api?.deviceHrObserver = self
 //         api?.deviceFeaturesObserver = self
+    }
+
+    // MARK: - RCTEventEmitter Subscriptions & Buffering
+
+    override func startObserving() {
+        hasListeners = true
+        flushPendingEvents()
+    }
+
+    override func stopObserving() {
+        hasListeners = false
+    }
+
+    override func sendEvent(withName name: String!, body: Any!) {
+        queueLock.lock()
+        defer { queueLock.unlock() }
+
+        if hasListeners {
+            super.sendEvent(withName: name, body: body)
+        } else {
+            // Cap queue size to protect memory (FIFO eviction)
+//             if pendingEvents.count >= MAX_BUFFER_COUNT {
+//                 pendingEvents.removeFirst(100)
+//             }
+            NSLog("PolarBridge: Buffer queued event '\(name ?? "")' (JS listener inactive)")
+            pendingEvents.append((name: name, body: body))
+        }
+    }
+
+    private func flushPendingEvents() {
+        queueLock.lock()
+        let eventsToFlush = pendingEvents
+        pendingEvents.removeAll()
+        queueLock.unlock()
+
+        guard !eventsToFlush.isEmpty else { return }
+
+        NSLog("PolarBridge: Flushing \(eventsToFlush.count) buffered events to JS")
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, self.hasListeners else { return }
+            for event in eventsToFlush {
+                self.emitToSuper(name: event.name, body: event.body)
+            }
+        }
+    }
+
+    /// Helper to invoke super.sendEvent directly without hitting the buffering override
+    private func emitToSuper(name: String, body: Any) {
+        super.sendEvent(withName: name, body: body)
     }
 
     @objc(connectToDevice:resolver:rejecter:)
@@ -316,11 +372,6 @@ class PolarBridge: RCTEventEmitter, ObservableObject
             pendingResolver = nil
             pendingRejecter = nil
         }
-    }
-
-    // Emit events
-    override func sendEvent(withName name: String!, body: Any!) {
-        super.sendEvent(withName: name, body: body)
     }
 
     override func supportedEvents() -> [String]! {
