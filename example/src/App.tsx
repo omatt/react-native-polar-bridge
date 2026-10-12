@@ -62,6 +62,7 @@ import type {
   ScannedDevice,
 } from '../../src/PolarDataModel';
 import {checkPermission, requestPermissions} from "./utils/permissions_manager";
+import {clearConnectedPolarDeviceId, getConnectedPolarDeviceId, setConnectedPolarDeviceId} from "./utils/storage";
 
 const displayDialogNoConnectedDevice = () => {
   console.log('Empty Device ID or no connected Device');
@@ -142,12 +143,23 @@ export default function App() {
       }
     );
 
+    resumeConnection().then();
+
     return () => {
       onDeviceFound.remove();
       onScanError.remove();
       onScanComplete.remove();
     };
   }, []);
+
+  const resumeConnection = async () => {
+    // Handle resume connection
+    const connectedDeviceId = await getConnectedPolarDeviceId();
+    if(connectedDeviceId){
+      console.log('DEBUG', `Resume connection ${connectedDeviceId}`);
+      handleConnect(connectedDeviceId);
+    }
+  };
 
   /**
    * Listen for device data stream from Android PolarBLE SDK
@@ -351,6 +363,7 @@ export default function App() {
     connectToDevice(deviceId).then((device: DeviceConnected) =>{
       console.log(`DEBUG ME Connected Polar Device: ${device.connectedDeviceId} Battery Level: ${device.batteryLevel}%`);
       setConnectedDeviceId(deviceId);
+      setConnectedPolarDeviceId(deviceId).then();
     });
   };
   //
@@ -367,7 +380,7 @@ export default function App() {
        * bufferMs is an optional parameter. When not set, the package sends
        * the sensor data from the Polar device every 10 seconds by default.
        */
-      fetchHrData(connectedDeviceId);
+      fetchHrData(connectedDeviceId, 1);
       // fetchHrData(connectedDeviceId, BUFFER_MS);
     } else {
       displayDialogNoConnectedDevice();
@@ -506,6 +519,7 @@ export default function App() {
                         stopAllStream();
                         disconnectFromDevice(device.deviceId);
                         setConnectedDeviceId(null);
+                        clearConnectedPolarDeviceId().then();
                       } else {
                         if (
                           connectedDeviceId &&

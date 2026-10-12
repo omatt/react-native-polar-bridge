@@ -65,6 +65,7 @@ class HrStreamManager {
 
                     self.hrBufferQueue.async {
                         for sample in hrData {
+                            NSLog("PolarBridge HR bpm: \(sample.hr), \(Date().formatted(.iso8601))")
                             var event: [String: Any] = [:]
                             event["hr"] = sample.hr
                             event["rrsMs"] = sample.rrsMs

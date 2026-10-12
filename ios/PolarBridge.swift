@@ -81,11 +81,13 @@ class PolarBridge: RCTEventEmitter, ObservableObject
     // MARK: - RCTEventEmitter Subscriptions & Buffering
 
     override func startObserving() {
+        NSLog("PolarBridge: startObserving")
         hasListeners = true
         flushPendingEvents()
     }
 
     override func stopObserving() {
+        NSLog("PolarBridge: stopObserving")
         hasListeners = false
     }
 
